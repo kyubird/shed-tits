@@ -1135,10 +1135,21 @@ rlmer_bw_scare_predict <- predict_response(rlmer_bw_bluti_group, "scare_outcome"
 lmer_bw_scare_predict <- predict_response(lmer_bw_bluti_group, "scare_outcome", margin = "mean_reference")
 
 ##rlmer
-bw_scare <- plot(rlmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "rlmer") 
+bw_scare <- plot(rlmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),  # normal vs.escape
+    axis.text.y = element_text(size = 18)   # tick marks 
+  )
+
 
 ##lmer
-bw_scare_lmer <- plot(lmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "lmer") 
+bw_scare_lmer <- plot(lmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),  # normal vs.escape
+    axis.text.y = element_text(size = 18)   # tick marks 
+  ) 
 
 bw_scare
 bw_scare_lmer
@@ -1146,11 +1157,21 @@ bw_scare_lmer
 #group response
 ##rlmer
 rlmer_bw_bluti_predict <- predict_response(rlmer_bw_bluti_group, c("day_since","exp_group"),margin = "empirical")
-bw_group <- plot(rlmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))+theme(legend.postion = "none")
+bw_group <- plot(rlmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))+ theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 ##lmer
 lmer_bw_bluti_predict <- predict_response(lmer_bw_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
-bw_group_lmer <- plot(lmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))+theme(legend.postion = "none")
+bw_group_lmer <- plot(lmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) +theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 bw_group
 bw_group_lmer
@@ -1238,11 +1259,21 @@ tab_model(lmer_maxF_bluti_group) #lmer actually most parsimonious
 ```{r}
 #scare_outcome
 rlmer_maxF_scare_predict <- predict_response(rlmer3_maxF_group, "scare_outcome", margin = "empirical")
-maxF_scare <- plot(rlmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "rlmer") 
+maxF_scare <- plot(rlmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 lmer_maxF_scare_predict <- predict_response(lmer_maxF_bluti_group, "scare_outcome", margin = "mean_reference")
 #mean_reference works. not empirical. why? 
-maxF_scare_lmer <- plot(lmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "lmer") 
+maxF_scare_lmer <- plot(lmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 maxF_scare
 maxF_scare_lmer
@@ -1251,8 +1282,18 @@ maxF_scare_lmer
 rlmer_maxF_group_predict <- predict_response(rlmer3_maxF_group, c("day_since","exp_group"),margin = "empirical")
 lmer_maxF_group_predict <- predict_response(lmer_maxF_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
-maxF_group <- plot(rlmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
-maxF_group_lmer <- plot(lmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+maxF_group <- plot(rlmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+maxF_group_lmer <- plot(lmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 maxF_group
 maxF_group_lmer
@@ -1339,8 +1380,18 @@ tab_model(rlmer_Fx_bluti_group)
 rlmer_Fx_scare_predict <- predict_response(rlmer_Fx_bluti_group, "scare_outcome",margin = "empirical")
 lmer_Fx_scare_predict <- predict_response(lmer_Fx_bluti_group, "scare_outcome",margin = "mean_reference")
 
-Fx_scare <- plot(rlmer_Fx_scare_predict) + labs(x ="", y = "Fx (N)", title = "rlmer")
-Fx_scare_lmer <- plot(lmer_Fx_scare_predict) + labs(x= "", y = "Fx (N)", title = "lmer")
+Fx_scare <- plot(rlmer_Fx_scare_predict) + labs(x ="", y = "Fx (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fx_scare_lmer <- plot(lmer_Fx_scare_predict) + labs(x= "", y = "Fx (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 Fx_scare
 Fx_scare_lmer
@@ -1349,8 +1400,18 @@ Fx_scare_lmer
 rlmer_Fx_group_predict <- predict_response(rlmer_Fx_bluti_group, c("day_since","exp_group"),margin = "empirical")
 lmer_Fx_group_predict <- predict_response(lmer_Fx_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
-Fx_group <- plot(rlmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))  
-Fx_group_lmer <- plot(lmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
+Fx_group <- plot(rlmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fx_group_lmer <- plot(lmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 Fx_group
 Fx_group_lmer
@@ -1436,8 +1497,18 @@ tab_model(lmer_Fy_bluti_group)
 rlmer_Fy_scare_predict <- predict_response(rlmer2_Fy_group, "scare_outcome",margin = "empirical")
 lmer_Fy_scare_predict <- predict_response(lmer_Fy_bluti_group, "scare_outcome",margin = "mean_reference")
 
-Fy_scare <- plot(rlmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "rlmer")
-Fy_scare_lmer <- plot(lmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "lmer")
+Fy_scare <- plot(rlmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fy_scare_lmer <- plot(lmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 Fy_scare
 Fy_scare_lmer
@@ -1447,8 +1518,19 @@ rlmer_Fy_group_predict <- predict_response(rlmer2_Fy_group, c("day_since","exp_g
 lmer_Fy_group_predict <- predict_response(lmer_Fy_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
 
-Fy_group <- plot(rlmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
-Fy_group_lmer <- plot(lmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
+Fy_group <- plot(rlmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fy_group_lmer <- plot(lmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 Fy_group
 Fy_group_lmer
@@ -1533,19 +1615,39 @@ tab_model(lmer_acc0_bluti_group)
 rlmer_acc0_scare_predict <- predict_response(rlmer3_acc0_group, "scare_outcome", margin = "empirical")
 lmer_acc0_scare_predict <- predict_response(lmer_acc0_bluti_group, "scare_outcome", margin = "mean_reference")
 
-acc0_scare <- plot(rlmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "rlmer")
-acc0_scare_lmer <- plot(lmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "lmer")
+acc0_scare <- plot(rlmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc0_scare_lmer <- plot(lmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc0_scare
 acc0_scare_lmer
 
 rlmer_acc0_group_predict <- predict_response(rlmer3_acc0_group, c("day_since","exp_group"), margin = "empirical")
 
-acc0_group <- plot(rlmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))   
+acc0_group <- plot(rlmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )  
 
 lmer_acc0_group_predict <- predict_response(lmer_acc0_bluti_group, c("day_since","exp_group"), margin = "mean_reference")
 
-acc0_group_lmer <- plot(lmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))  
+acc0_group_lmer <- plot(lmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  ) 
  
 acc0_group
 acc0_group_lmer
@@ -1636,8 +1738,18 @@ rlmer_v1_scare_predict <- predict_response(rlmer3_v1_group, "scare_outcome", mar
 lmer_v1_scare_predict <- predict_response(lmer_v1_bluti_group, "scare_outcome", margin = "mean_reference")
 
 
-v1_scare <- plot(rlmer_v1_scare_predict) + labs(title = "rlmer", x ="", y = "v1 (m/s)")
-v1_scare_lmer <- plot(lmer_v1_scare_predict) + labs(title = "lmer", x = "", y = "v1 (m/s)")
+v1_scare <- plot(rlmer_v1_scare_predict) + labs(title = "", x ="", y = "v1 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v1_scare_lmer <- plot(lmer_v1_scare_predict) + labs(title = "", x = "", y = "v1 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v1_scare
 v1_scare_lmer
@@ -1647,8 +1759,21 @@ rlmer_v1_group_predict <- predict_response(rlmer3_v1_group, c("day_since","exp_g
 lmer_v1_group_predict <- predict_response(lmer_v1_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
 
-v1_group <- plot(rlmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))  
-v1_group_lmer <- plot(lmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
+v1_group <- plot(rlmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v1_group_lmer <- plot(lmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v1_group 
 v1_group_lmer
@@ -1735,8 +1860,18 @@ tab_model(lmer_v2_bluti_group)
 rlmer_v2_scare_predict <- predict_response(rlmer_v2_bluti_group, "scare_outcome", margin = "empirical")
 lmer_v2_scare_predict <- predict_response(lmer_v2_bluti_group, "scare_outcome", margin = "mean_reference")
 
-v2_scare <- plot(rlmer_v2_scare_predict) + labs(title = "rlmer", x ="", y = "v2 (m/s)")
-v2_scare_lmer <- plot(lmer_v2_scare_predict) + labs(title = "lmer", x = "", y = "v2 (m/s)")
+v2_scare <- plot(rlmer_v2_scare_predict) + labs(title = "", x ="", y = "v2 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v2_scare_lmer <- plot(lmer_v2_scare_predict) + labs(title = "", x = "", y = "v2 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v2_scare
 v2_scare_lmer
@@ -1746,8 +1881,21 @@ v2_scare_lmer
 rlmer_v2_group_predict <- predict_response(rlmer_v2_bluti_group, c("day_since","exp_group"),margin = "empirical")
 lmer_v2_group_predict <- predict_response(lmer_v2_bluti_group, c("day_since","exp_group"), margin = "mean_reference")
 
-v2_group <- plot(rlmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))  
-v2_group_lmer <- plot(lmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))  
+v2_group <- plot(rlmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v2_group_lmer <- plot(lmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v2_group 
 v2_group_lmer
@@ -1835,8 +1983,18 @@ tab_model(lmer_v3_bluti_group)
 rlmer_v3_scare_predict <- predict_response(rlmer_v3_bluti_group, "scare_outcome", margin = "empirical")
 lmer_v3_scare_predict <- predict_response(lmer_v3_bluti_group, "scare_outcome", margin = "mean_reference")
 
-v3_scare <- plot(rlmer_v3_scare_predict) + labs(title = "rlmer", x ="", y = "v3 (m/s)")
-v3_scare_lmer <- plot(lmer_v3_scare_predict) + labs(title = "lmer", x ="", y = "v3 (m/s)")
+v3_scare <- plot(rlmer_v3_scare_predict) + labs(title = "", x ="", y = "v3 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v3_scare_lmer <- plot(lmer_v3_scare_predict) + labs(title = "", x ="", y = "v3 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
  
 v3_scare
 v3_scare_lmer
@@ -1845,9 +2003,21 @@ v3_scare_lmer
 rlmer_v3_group_predict <- predict_response(rlmer_v3_bluti_group, c("day_since","exp_group"),margin = "empirical")
 lmer_v3_group_predict <- predict_response(lmer_v3_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
-v3_group <- plot(rlmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
+v3_group <- plot(rlmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
-v3_group_lmer <- plot(lmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) 
+v3_group_lmer <- plot(lmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v3_group 
 v3_group_lmer
@@ -1938,8 +2108,18 @@ rlmer_v4_scare_predict <- predict_response(rlmer_v4_bluti_group, "scare_outcome"
 lmer_v4_scare_predict <- predict_response(lmer_v4_bluti_group, "scare_outcome", margin = "mean_reference")
 
 
-v4_scare <- plot(rlmer_v4_scare_predict) + labs(title = "rlmer", x ="", y="v4 (m/s)")
-v4_scare_lmer <- plot(lmer_v4_scare_predict) + labs(title = "lmer", x ="", y="v4 (m/s)")
+v4_scare <- plot(rlmer_v4_scare_predict) + labs(title = "", x ="", y="v4 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v4_scare_lmer <- plot(lmer_v4_scare_predict) + labs(title = "", x ="", y="v4 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 
 v4_scare
@@ -1950,8 +2130,22 @@ rlmer_v4_group_predict <- predict_response(rlmer_v4_bluti_group, c("day_since","
 lmer_v4_group_predict <- predict_response(lmer_v4_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
 
-v4_group <- plot(rlmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
-v4_group_lmer <- plot(lmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+v4_group <- plot(rlmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+
+v4_group_lmer <- plot(lmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 v4_group 
 v4_group_lmer
@@ -2042,11 +2236,21 @@ tab_model(lmer_acc1_bluti_group)
 ```{r}
 
 #scare
-rlmer_acc1_scare_predict <- predict_response(rlmer2_acc1_group, "scare_outcome", margin = "empirical")
+rlmer_acc1_scare_predict <- predict_response(rlmer2_acc1_group, "scare_outcome", margin = "empirical") 
 lmer_acc1_scare_predict <- predict_response(lmer_acc1_bluti_group, "scare_outcome", margin = "mean_reference")
 
-acc1_scare <- plot(rlmer_acc1_scare_predict) + labs(title = "rlmer", x = "", y = "acc1 (m/s^2)")
-acc1_scare_lmer <- plot(lmer_acc1_scare_predict) + labs(title = "lmer", x = "", y = "acc1 (m/s^2)")
+acc1_scare <- plot(rlmer_acc1_scare_predict) + labs(title = "", x = "", y = "acc1 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc1_scare_lmer <- plot(lmer_acc1_scare_predict) + labs(title = "", x = "", y = "acc1 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 
 acc1_scare
@@ -2058,9 +2262,19 @@ rlmer_acc1_group_predict <- predict_response(rlmer2_acc1_group, c("day_since","e
 lmer_acc1_group_predict <- predict_response(lmer_acc1_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
 
-acc1_group <- plot(rlmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+acc1_group <- plot(rlmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
-acc1_group_lmer <- plot(lmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+acc1_group_lmer <- plot(lmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc1_group 
 acc1_group_lmer
@@ -2150,8 +2364,18 @@ tab_model(lmer_acc2_bluti_group)
 rlmer_acc2_scare_predict <- predict_response(rlmer_acc2_bluti_group, "scare_outcome", margin = "empirical")
 lmer_acc2_scare_predict <- predict_response(lmer_acc2_bluti_group, "scare_outcome", margin = "mean_reference")
 
-acc2_scare <- plot(rlmer_acc2_scare_predict) + labs(title = "rlmer", x = "", y = "acc2 (m/s^2)")
-acc2_scare_lmer <- plot(lmer_acc2_scare_predict) + labs(title = "lmer", x = "", y = "acc2 (m/s^2)")
+acc2_scare <- plot(rlmer_acc2_scare_predict) + labs(title = "", x = "", y = "acc2 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc2_scare_lmer <- plot(lmer_acc2_scare_predict) + labs(title = "", x = "", y = "acc2 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc2_scare
 acc2_scare_lmer
@@ -2161,8 +2385,18 @@ rlmer_acc2_bluti_predict <- predict_response(rlmer_acc2_bluti_group, c("day_sinc
 lmer_acc2_bluti_predict <- predict_response(lmer_acc2_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
 
-acc2_group <- plot(rlmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
-acc2_group_lmer <- plot(lmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+acc2_group <- plot(rlmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc2_group_lmer <- plot(lmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc2_group 
 acc2_group_lmer
@@ -2189,8 +2423,7 @@ test_predictions(lmer_acc2_bluti_interact, test = "interaction", p_adjust = "sid
 
 #no interaction effect
 ```
-##### lmer 
-###### test
+
 #### acc3
 ##### model assumption
 ```{r}
@@ -2254,8 +2487,18 @@ tab_model(lmer_acc3_bluti_group)
 rlmer_acc3_scare_predict <- predict_response(rlmer_acc3_bluti_group, "scare_outcome", margin = "empirical")
 lmer_acc3_scare_predict <- predict_response(lmer_acc3_bluti_group, "scare_outcome", margin = "mean_reference")
 
-acc3_scare <- plot(rlmer_acc3_scare_predict) + labs(title = "rlmer", x = "", y = "acc3 (m/s^2)")
-acc3_scare_lmer <- plot(lmer_acc3_scare_predict) + labs(title = "lmer", x = "", y = "acc3 (m/s^2)")
+acc3_scare <- plot(rlmer_acc3_scare_predict) + labs(title = "", x = "", y = "acc3 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc3_scare_lmer <- plot(lmer_acc3_scare_predict) + labs(title = "", x = "", y = "acc3 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc3_scare
 acc3_scare_lmer
@@ -2264,8 +2507,19 @@ acc3_scare_lmer
 rlmer_acc3_group_predict <- predict_response(rlmer_acc3_bluti_group, c("day_since","exp_group"),margin = "empirical")
 lmer_acc3_group_predict <- predict_response(lmer_acc3_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
 
-acc3_group <- plot(rlmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "rlmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
-acc3_group_lmer <- plot(lmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "lmer", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))
+acc3_group <- plot(rlmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc3_group_lmer <- plot(lmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
 
 acc3_group 
 acc3_group_lmer
@@ -2316,5 +2570,11 @@ ggarrange(bw_scare_lmer, maxF_scare_lmer, Fx_scare_lmer, Fy_scare_lmer,
 ggarrange(bw_group, maxF_group, Fx_group, Fy_group,
           acc0_group, acc1_group, acc2_group, acc3_group,
           v1_group, v2_group, v3_group,v4_group, nrow = 3, ncol = 4)
+
+```
+```{r}
+ggarrange(bw_group_lmer, maxF_group_lmer, Fx_group_lmer, Fy_group_lmer,
+          acc0_group_lmer, acc1_group_lmer, acc2_group_lmer, acc3_group_lmer,
+          v1_group_lmer, v2_group_lmer, v3_group_lmer, v4_group_lmer, nrow = 3, ncol = 4)
 
 ```
