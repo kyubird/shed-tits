@@ -1,0 +1,2681 @@
+---
+title: "shed-stats-all-days"
+author: "Kyu Min Huh"
+date: "2025-08-07"
+output:
+  html_document:
+    code_folding: show
+    fig_height: 5
+    fig_width: 7
+    toc: TRUE
+    toc_depth: 5
+    toc_float: 
+      collapsed: false
+      smooth_scroll: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = 'center', fig.pos = 'H')
+```
+                                    
+# I. Data Carving
+
+## libraries
+```{r cars, echo = FALSE}
+library(dplyr)
+library(stringr)
+library(readr)
+library(fuzzyjoin)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(ggpubr)
+library(rstatix)
+library(coin)
+library(scales)
+library(gridExtra)
+library(ggthemes)
+library(ggbreak)
+library(lme4)
+library(rptR)
+library(reshape2)
+library(olsrr)
+library(gvlma)
+library(performance)
+library(PerformanceAnalytics)
+library(usethis)
+library(devtools)
+library(redres)
+library(EnvStats)
+library(lmtest)
+library(lmerTest)
+library(AICcmodavg)
+library(emmeans)
+library(MuMIn)
+library(sjPlot)
+library(effects)
+library(LaplacesDemon)
+library(plm)
+library(clubSandwich)
+library(modelsummary)
+library(marginaleffects)
+library(DHARMa)
+library(ggeffects)
+library(robustlmm)
+```
+
+
+
+### 1. import dataset
+```{r dataset}
+
+# force data - day0
+F_control_full <- read.delim(file ="C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\F_control_full.csv", sep = ",") 
+
+F_treats_full <- read.delim(file ="C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\F_treats_full.csv", sep = ",") 
+
+#day1
+F_day1_full <- read.delim(file =  "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\F_day1_full.csv", sep = ",") 
+
+#day-1 - being processed in VS code
+F_dayminus1_full <- read.delim(file =  "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\F_dayminus1_full.csv", sep = ",") 
+
+# IR data
+control_ir_full <- read.delim(file = "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\ir_control_ordered.csv", sep = ",")
+
+treats_ir_full <- read.delim(file = "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\ir_treats_ordered.csv", sep = ",") 
+
+day1_ir_full <- read.delim(file = "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\day1_ir_full.csv", sep = ",")
+
+dayminus1_ir_full <- read.delim(file = "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\day-1_ir_full.csv", sep = ",")
+
+# temperature data 
+temp_CP7 <- read.delim(file = "C:\\Users\\kmh\\Documents\\DATA\\2024-5\\temperature\\temp_CP7.csv", sep = ";", header = FALSE) %>%
+  select(V2, V4) %>%
+  slice(c(61966:73581),) #2024-11-06 00:00 - 2025-03-06 23:45
+  
+
+temp_CP28 <- read.delim(file = "C:\\Users\\kmh\\Documents\\DATA\\2024-5\\temperature\\temp_CP28.csv", sep = ";", header = FALSE) %>%
+  select(V2, V4) %>%
+  slice(c(62246:73861),)
+
+colnames(temp_CP7) = c("datetime", "temperature_a")
+colnames(temp_CP28) = c("datetime", "temperature_b")
+
+temperature <- merge(temp_CP7, temp_CP28, by = "datetime")
+
+  ## celsius column as a mean of two temperature measurements
+temperature <- temperature %>%
+  mutate(datetime = str_replace_all(datetime, "\\.", "-")) %>%
+  mutate(datetime = as.POSIXct(datetime, format = "%Y-%m-%d %H:%M")) %>% #aha so should not put %S as it's not in original formal %>%
+  mutate(celsius = (temperature_a+temperature_b)/2)
+
+plot(temperature$temperature_a, temperature$temperature_b)
+
+```
+
+### shape of datasets
+```{r}
+
+cat("F_control_full dim: ",dim(F_control_full)) #2063
+cat("control_ir_full dim: ",dim(control_ir_full)) #1314
+cat("F_treats_full dim: ",dim(F_treats_full)) #2215
+cat("treats_ir_full dim: ",dim(treats_ir_full)) #1428
+
+cat("F_day1_full dim: ",dim(F_day1_full)) #5808
+cat("day1_ir_full dim: ",dim(day1_ir_full)) #5171
+cat("F_day-1_full dim: ",dim(F_dayminus1_full)) #10465
+cat("day-1_ir_full dim: ",dim(dayminus1_ir_full)) #6701
+
+
+```
+
+### 2. pooling control and treatment data 
+```{r}
+#F
+F_pooled_full <-rbind(F_control_full, F_treats_full)
+
+#IR
+pooled_ir_full <-rbind(control_ir_full, treats_ir_full)
+
+cat("F_pooled_full dim: ",dim(F_pooled_full)) #4278
+cat("pooled_ir_full dim: ",dim(pooled_ir_full)) #2742
+```
+
+### 3. add hr column 
+```{r}
+#F
+F_pooled_full$datetime <- as.POSIXct(F_pooled_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+F_day1_full$datetime <- as.POSIXct(F_day1_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+F_dayminus1_full$datetime <- as.POSIXct(F_dayminus1_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+
+
+F_pooled_full$hr <- hour(F_pooled_full$datetime)
+F_day1_full$hr <- hour(F_day1_full$datetime)
+F_dayminus1_full$hr <- hour(F_dayminus1_full$datetime)
+
+#IR
+pooled_ir_full$datetime <- as.POSIXct(pooled_ir_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+day1_ir_full$datetime <- as.POSIXct(day1_ir_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+dayminus1_ir_full$datetime <- as.POSIXct(dayminus1_ir_full$datetime, format = "%Y-%m-%d %H:%M:%S")
+
+pooled_ir_full$hr <- hour(pooled_ir_full$datetime)
+day1_ir_full$hr <- hour(day1_ir_full$datetime)
+dayminus1_ir_full$hr <- hour(dayminus1_ir_full$datetime)
+
+```
+
+### 4. add temperature column
+```{r}
+temperature <- temperature[,!names(temperature) %in% c("temperature_a", "temperature_b")] 
+```
+
+```{r}
+#merge by closest value in temperatre
+F_pooled_full <- F_pooled_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+pooled_ir_full <- pooled_ir_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+
+F_day1_full <- F_day1_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+day1_ir_full <- day1_ir_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+
+F_dayminus1_full <- F_dayminus1_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+dayminus1_ir_full <- dayminus1_ir_full %>%
+  mutate(datetime_rounded = round_date(datetime, "15 minutes")) %>%
+  mutate(datetime_rounded2 = datetime_rounded - hours(12)) %>%
+  left_join(temperature, by = c("datetime_rounded" = "datetime")) %>%
+  left_join(temperature, by = c("datetime_rounded2" = "datetime")) %>%
+  rename( c(celsius.now = "celsius.x", celsius.12hr = "celsius.y"))
+
+```
+
+
+
+### 5. bodyweight filter
+```{r}
+
+#bodyweight calculation
+F_pooled_full$bodyweight = (F_pooled_full$bodyweight/9.8067) #bodyweight in kg
+F_day1_full$bodyweight = (F_day1_full$bodyweight/9.8067)
+F_dayminus1_full$bodyweight = (F_dayminus1_full$bodyweight/9.8067)
+
+#bodyweight filter
+#find rows where where 'bodyweight' > 0.25 OR 'species' == 'greti' & 'bodyweight' < 0.015 OR 'species' == 'bluti' & 'bodyweight > 0.15
+
+bw_errors_day0 <- F_pooled_full %>%
+  filter(
+    bodyweight > 0.021 |
+    (species == "greti" & bodyweight < 0.016) |
+    (species == "bluti" & bodyweight > 0.013) |
+    (species == "bluti" & bodyweight < 0.008)
+  )
+
+bw_errors_day1 <- F_day1_full %>%
+  filter(
+    bodyweight > 0.021 |
+    (species == "greti" & bodyweight < 0.016) |
+    (species == "bluti" & bodyweight > 0.013) |
+    (species == "bluti" & bodyweight < 0.008)
+  )
+
+bw_errors_dayminus1 <- F_dayminus1_full %>%
+  filter(
+    bodyweight > 0.021 |
+    (species == "greti" & bodyweight < 0.016) |
+    (species == "bluti" & bodyweight > 0.013) |
+    (species == "bluti" & bodyweight < 0.008)
+  )
+
+print(head(bw_errors_day0, 3))
+print(head(bw_errors_day1, 3))
+print(head(bw_errors_dayminus1, 3))
+
+cat("Force day0 data before filtering: ",dim(F_pooled_full))
+
+F_pooled_full <- setdiff(F_pooled_full, bw_errors_day0)
+cat("Force day0 data after filtering: ",dim(F_pooled_full))
+
+cat("Force day1: ",dim(F_day1_full))
+
+F_day1_full <- setdiff(F_day1_full, bw_errors_day1)
+cat("Force day1 after filtering: ",dim(F_day1_full))
+
+cat("Force day-1: ",dim(F_dayminus1_full))
+F_dayminus1_full <- setdiff(F_dayminus1_full, bw_errors_dayminus1)
+cat("Force day-1 after filtering: ",dim(F_dayminus1_full))
+
+```
+
+### 6. int_acc and bodyweight adjustments
+```{r}
+#int_acc calculation
+F_pooled_full$int_acc = (F_pooled_full$max_Ftot/F_pooled_full$bodyweight)
+F_day1_full$int_acc = (F_day1_full$max_Ftot/F_day1_full$bodyweight)
+F_dayminus1_full$int_acc = (F_dayminus1_full$max_Ftot/F_dayminus1_full$bodyweight)
+
+
+# Drop rows where int_acc is NA
+F_day0 <- F_pooled_full[!is.na(F_pooled_full$int_acc), ]
+F_day1 <- F_day1_full[!is.na(F_day1_full$int_acc),]
+F_dayminus1 <- F_dayminus1_full[!is.na(F_dayminus1_full$int_acc),]
+
+
+dim(F_day0)#4509
+dim(F_day1)#6315
+dim(F_dayminus1)#9352
+colnames(F_day0)
+colnames(F_day1)
+colnames(F_dayminus1)
+
+#make bodyweight to g 
+F_day0$bodyweight <- F_day0$bodyweight*1000
+F_day1$bodyweight <- F_day1$bodyweight*1000
+F_dayminus1$bodyweight <- F_dayminus1$bodyweight*1000
+
+
+```
+
+
+### 7. calculate angle
+```{r}
+#run only once
+F_day0 <- F_day0 %>%
+  mutate(takeoff_angle = atan(Fx_maxFtot/Fy_maxFtot)* (180/pi))
+
+F_day1 <- F_day1 %>%
+  mutate(takeoff_angle = atan(Fx_maxFtot/Fy_maxFtot)* (180/pi))
+
+F_dayminus1 <- F_dayminus1 %>%
+  mutate(takeoff_angle = atan(Fx_maxFtot/Fy_maxFtot)* (180/pi))
+
+```
+
+
+
+
+### 8. add 'day_since'column
+```{r}
+
+F_day0$day_since <- 0
+F_day1$day_since <- 1
+F_dayminus1$day_since <- -1
+
+pooled_ir_full$day_since <- 0
+day1_ir_full$day_since <- 1
+dayminus1_ir_full$day_since <- -1 
+
+colnames(F_day0)
+colnames(F_day1)
+colnames(F_dayminus1)
+
+
+
+#for each 'event_no', only save the row with 'status' == 'Arrive' 
+F_day1 <- F_day1 %>%
+  group_by(event_no) %>%
+  filter(status == "Arrive")
+
+F_dayminus1 <- F_dayminus1 %>%
+  group_by(event_no) %>%
+  filter(status == "Arrive")
+
+day1_ir_clean <- day1_ir_full %>%
+  group_by(id, datetime) %>%
+  filter(status == "Arrive")
+
+dayminus1_ir_clean <- dayminus1_ir_full %>%
+  group_by(id, datetime) %>%
+  filter(status == "Arrive")
+
+day0_ir <- pooled_ir_full
+day1_ir <- day1_ir_clean
+dayminus1_ir <- dayminus1_ir_clean
+
+cat("F_day1 dim: ",dim(F_day1)) #3441
+cat("F_day-1 dim: ",dim(F_dayminus1)) #5535
+cat("day1_ir dim: ",dim(day1_ir))#2462
+cat("day-1_ir dim: ",dim(dayminus1_ir)) #3194
+```
+
+
+### 9. add 'group' column
+- tracking control & treatment birds on experimental days to the day after
+#### a. group columns for F
+```{r}
+print(head(F_day0,3))
+
+# Initialize an empty group_key dataframe
+group_key_F <- data.frame(id = character(),
+                        group = character(),
+                        day = character())
+
+# Process each day in F_scares
+for (current_day in unique(F_day0$day)) {
+  # Filter rows for the current day
+  daily_data <- F_day0 %>%
+    filter(day == current_day) %>%
+    distinct(id, group, day)  # Find unique combinations of 'id', 'group', and 'day'
+  #print(daily_data)
+  
+  # Append processed data to group_key dataframe
+  group_key_F <- bind_rows(group_key_F, daily_data)
+}
+
+# View the resulting group_key dataframe
+print(head(group_key_F,3))
+
+```
+#### b. group columns for IR
+```{r}
+#F_scares$day <- day(F_scares$visit_datetime)
+print(head(day0_ir,3))
+
+# Initialize an empty group_key dataframe
+group_key_ir <- data.frame(id = character(),
+                        group = character(),
+                        day = character())
+
+# Process each day in F_scares
+for (current_day in unique(day0_ir$day)) {
+  # Filter rows for the current day
+  daily_data <- pooled_ir_full %>%
+    filter(day == current_day) %>%
+    distinct(id, group, day)  # Find unique combinations of 'id', 'group', and 'day'
+  #print(daily_data)
+  
+  # Append processed data to group_key dataframe
+  group_key_ir <- bind_rows(group_key_ir, daily_data)
+}
+
+# View the resulting group_key dataframe
+print(head(group_key_ir,3))
+
+```
+#### c. Merge
+```{r}
+# F 
+group_key_F$date_to_match_day0 = ymd(group_key_F$day)
+group_key_F$date_to_match_day1 = date(group_key_F$date_to_match_day0) +1
+group_key_F$date_to_match_dayminus1 = date(group_key_F$date_to_match_day0) -1
+
+print(head(group_key_F,3))
+
+## remove a 'day' column 
+#F_day1 <- F_day1 %>% select(-day)
+#F_dayminus1 <- F_dayminus1 %>% select(-day)
+
+F_day1$date = date(F_day1$visit_datetime)
+F_dayminus1$date = date(F_dayminus1$visit_datetime)
+
+F_day1_groups <- merge(F_day1, group_key_F, by.x = c("id","date"), by.y = c("id","date_to_match_day1"), all.x = TRUE)
+dim(F_day1_groups) #3024
+
+F_dayminus1_groups <- merge(F_dayminus1, group_key_F, by.x = c("id","date"), by.y = c("id", "date_to_match_dayminus1"), all.x = TRUE)
+# IR
+group_key_ir$date_to_match_day0 = ymd(group_key_ir$day)
+group_key_ir$date_to_match_day1 = date(group_key_ir$date_to_match_day0) +1
+group_key_ir$date_to_match_dayminus1 = date(group_key_ir$date_to_match_day0) -1
+
+print(head(group_key_ir,3))
+
+## remove a 'day' column 
+day1_ir <- day1_ir %>% select(-day)
+dayminus1_ir <- dayminus1_ir %>% select(-day)
+
+#make an operationable 'date' column 
+day1_ir$date = date(day1_ir$visit_datetime)
+dayminus1_ir$date = date(dayminus1_ir$visit_datetime)
+
+#merge
+day1_ir_groups <- merge(day1_ir, group_key_ir, by.x = c("id","date"), by.y = c("id","date_to_match_day1"), all.x = TRUE)
+
+dayminus1_ir_groups <- merge(dayminus1_ir, group_key_ir, by.x = c("id","date"), by.y = c("id","date_to_match_dayminus1"), all.x = TRUE)
+
+dim(day1_ir_groups) #2462
+dim(dayminus1_ir_groups) #3194
+
+```
+
+#### d. Drop rows where visits are not assigned to any group
+```{r}
+# F 
+cat("F_day1_groups with NAs: ",dim(F_day1_groups)) #3441
+F_day1_groups_clean <- F_day1_groups[!is.na(F_day1_groups$group), ]
+cat("F_day1_groups without NAs: ",dim(F_day1_groups_clean)) #2849. 
+
+cat("F_day-1_groups with NAs: ",dim(F_dayminus1_groups)) #5535 
+F_dayminus1_groups_clean <- F_dayminus1_groups[!is.na(F_dayminus1_groups$group), ]
+cat("F_day-1_groups without NAs: ",dim(F_dayminus1_groups_clean)) #4535
+
+
+# IR
+cat("day1_ir_groups with NAs: ",dim(day1_ir_groups)) #2462
+day1_ir_groups_clean <- day1_ir_groups[!is.na(day1_ir_groups$group), ]
+cat("day1_ir_groups without NAs: ",dim(day1_ir_groups_clean)) #1902  not too bad! 
+
+cat("day-1_ir_groups with NAs: ",dim(dayminus1_ir_groups)) #3194
+dayminus1_ir_groups_clean <- dayminus1_ir_groups[!is.na(dayminus1_ir_groups$group), ]
+cat("day-1_ir_groups without NAs: ",dim(dayminus1_ir_groups_clean)) #2521
+
+```
+#### e. IR - s_tot
+```{r}
+
+day0_ir <- day0_ir %>% 
+  mutate(exit_s = (t12+t23+t34+t45)/1000)
+
+day1_ir_groups_clean <- day1_ir_groups_clean %>% 
+  mutate(exit_s = (t12+t23+t34+t45)/1000)
+
+dayminus1_ir_groups_clean <- dayminus1_ir_groups_clean %>% 
+  mutate(exit_s = (t12+t23+t34+t45)/1000)
+
+```
+
+#### e. binding into one dataset with day0 & day1
+```{r}
+#F
+colnames(F_day1_groups_clean)
+colnames(F_day0)
+#max_Fx, max_Fy -> takeoff_angle
+F_day1_final <- F_day1_groups_clean %>%select("id","visit_datetime","event_no","bodyweight","max_Ftot","Fx_maxFtot","Fy_maxFtot","takeoff_angle","species","sex","age","bw_filled","hr","int_acc","day_since","group","celsius.now", "celsius.12hr")
+
+F_dayminus1_final <- F_dayminus1_groups_clean %>% select("id","visit_datetime","event_no","bodyweight","max_Ftot","Fx_maxFtot","Fy_maxFtot","takeoff_angle","species","sex","age","bw_filled","hr","int_acc","day_since","group","celsius.now", "celsius.12hr")
+
+#adding scare_outcome == 0 for day1 
+F_day1_final$scare_outcome <- 0 
+F_day1_final$prev_scares <- 0 
+F_dayminus1_final$scare_outcome <- 0 
+F_dayminus1_final$prev_scares <- 0 
+
+F_day0_final <- F_day0 %>% select("id","visit_datetime","event_no","bodyweight","max_Ftot","Fx_maxFtot","Fy_maxFtot","takeoff_angle","species","sex","age","bw_filled","hr","int_acc","day_since","group", "scare_outcome","prev_scares","celsius.now", "celsius.12hr") 
+
+day01_F <- rbind(F_day0_final, F_day1_final)
+
+day0minus_F <- rbind(F_dayminus1_final, F_day0_final)
+
+all_days_F <- rbind(F_dayminus1_final, F_day0_final, F_day1_final)
+
+cat("day01_F dim: ",dim(day01_F)) #7973
+cat("day0minus_F dim: ",dim(day0minus_F)) #9659
+cat("all_days_F dim: ",dim(all_days_F)) #12508
+
+
+#IR 
+colnames(day1_ir_groups_clean)
+colnames(pooled_ir_full)
+
+day1_ir_final <- day1_ir_groups_clean %>%select("id","visit_datetime","exit_s", "v1","v2","v3","v4","acc1","acc2","acc3","species","sex","age","hr","day_since","group","celsius.now", "celsius.12hr")
+
+dayminus1_ir_final <- dayminus1_ir_groups_clean %>% select("id","visit_datetime","exit_s", "v1","v2","v3","v4","acc1","acc2","acc3","species","sex","age","hr","day_since","group","celsius.now", "celsius.12hr")
+  
+# adding scare_outcome for day1 and day-1
+day1_ir_final$scare_outcome <- 0 
+day1_ir_final$prev_scares <- 0 
+dayminus1_ir_final$scare_outcome <- 0 
+dayminus1_ir_final$prev_scares <- 0 
+
+day0_ir_final <- day0_ir %>% select("id","visit_datetime","exit_s", "v1","v2","v3","v4","acc1","acc2","acc3","species","sex","age","hr","day_since","group", "scare_outcome", "prev_scares","celsius.now", "celsius.12hr") 
+
+day01_ir <- rbind(day0_ir_final, day1_ir_final)
+day0minus_ir <-rbind(dayminus1_ir_final, day0_ir_final)
+all_days_ir <- rbind(dayminus1_ir_final, day0_ir_final, day1_ir_final)
+
+# Drop rows with NA values and Inf in specified columns
+day01_ir <- day01_ir %>%
+  filter(!is.na(acc1) & !is.nan(acc1) & is.finite(acc1) &
+         !is.na(acc2) & !is.nan(acc2) & is.finite(acc2) &
+         !is.na(acc3) & !is.nan(acc3) & is.finite(acc3))
+
+day0minus_ir <- day0minus_ir %>%
+  filter(!is.na(acc1) & !is.nan(acc1) & is.finite(acc1) &
+         !is.na(acc2) & !is.nan(acc2) & is.finite(acc2) &
+         !is.na(acc3) & !is.nan(acc3) & is.finite(acc3))
+
+all_days_ir <- all_days_ir %>%
+  filter(!is.na(acc1) & !is.nan(acc1) & is.finite(acc1) &
+         !is.na(acc2) & !is.nan(acc2) & is.finite(acc2) &
+         !is.na(acc3) & !is.nan(acc3) & is.finite(acc3))
+
+cat("day01_ir dim: ",dim(day01_ir)) #5322
+cat("day0minus_ir dim: ",dim(day0minus_ir)) #5942
+cat("all_days_ir dim: ",dim(all_days_ir)) #7843
+
+
+```
+#### f. 'date' column as categorical
+```{r}
+day01_F$visit_datetime <- as.POSIXct(day01_F$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+day01_ir$visit_datetime <- as.POSIXct(day01_ir$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+day0minus_F$visit_datetime <- as.POSIXct(day0minus_F$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+day0minus_ir$visit_datetime <- as.POSIXct(day0minus_ir$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+all_days_F$visit_datetime <- as.POSIXct(all_days_F$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+all_days_ir$visit_datetime <- as.POSIXct(all_days_ir$visit_datetime, format = "%Y-%m-%d %H:%M:%S")
+
+day01_F$date <- date(day01_F$visit_datetime)
+day01_ir$date <- date(day01_ir$visit_datetime)
+day01_F$month <- month(day01_F$visit_datetime)
+day01_ir$month <- month(day01_ir$visit_datetime)
+
+day0minus_F$date <- date(day0minus_F$visit_datetime)
+day0minus_ir$date <- date(day0minus_ir$visit_datetime)
+day0minus_F$month <- month(day0minus_F$visit_datetime)
+day0minus_ir$month <- month(day0minus_ir$visit_datetime)
+
+all_days_F$date <- date(all_days_F$visit_datetime)
+all_days_ir$date <- date(all_days_ir$visit_datetime)
+all_days_F$month <- month(all_days_F$visit_datetime)
+all_days_ir$month <- month(all_days_ir$visit_datetime)
+```
+
+#### g. check scare_outcome
+```{r}
+day01_F <- day01_F %>%
+  filter(!(group == "control" & scare_outcome == 1))
+
+day01_ir <- day01_ir %>%
+  filter(!(group == "control" & scare_outcome == 1 ))
+
+day0minus_F <- day0minus_F %>%
+  filter(!(group == "control" & scare_outcome == 1))
+
+day0minus_ir <- day0minus_ir %>%
+  filter(!(group == "control" & scare_outcome == 1 ))
+
+all_days_F <- all_days_F %>%
+  filter(!(group == "control" & scare_outcome == 1))
+
+all_days_ir <- all_days_ir %>%
+  filter(!(group == "control" & scare_outcome == 1 ))
+
+dim(day01_F) #7322
+dim(day0minus_F) #9655
+dim(all_days_ir) #7839
+
+dim(day01_ir) #5318
+dim(day0minus_ir) #5938
+dim(all_days_F) #11438
+
+```
+#### h. flight no. column
+```{r}
+all_days_F <- all_days_F %>%
+  arrange(id, date, visit_datetime) %>%
+  group_by(id, date) %>%
+  mutate(flight_no = row_number())
+
+all_days_ir <- all_days_ir %>%
+  arrange(id, date, visit_datetime) %>%
+  group_by(id, date) %>%
+  mutate(flight_no = row_number())
+  
+```
+
+# II. Model Assumption checks
+## A->B?. Model selection
+### 1. proposed linear model
+```{r}
+lmer_bw = lmer(bodyweight ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_F)
+
+lmer_maxFtot = lmer(max_Ftot ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_F)
+
+lmer_Fx = lmer(Fx_maxFtot ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_F)
+
+lmer_Fy = lmer(Fy_maxFtot ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_F)
+
+lmer0 = lmer(int_acc ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data =   all_days_F)
+
+lmer_exits = lmer(exit_s ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data =   all_days_ir)
+
+
+lmer_v1 = lmer(v1 ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir)
+
+lmer_v2 = lmer(v2 ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir)
+
+lmer_v3 = lmer(v3 ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir)
+
+lmer_v4 = lmer(v4 ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir)
+
+
+
+lmer1 = lmer(acc1 ~ 1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data =  all_days_ir)
+
+lmer2 = lmer(acc2 ~  1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir) 
+
+lmer3 = lmer(acc3 ~  1 + day_since*group + scare_outcome + prev_scares + flight_no + sex + age + hr + date + celsius.now + (1|id), data = all_days_ir) 
+
+```
+
+
+
+### 2. outliers detection
+#### a. outliers - forces
+```{r}
+test_bw <- rosnerTest(all_days_F$bodyweight, k=5) #no outliers
+test_bw$all.stats
+
+test_acc0 <- rosnerTest(all_days_F$int_acc, k=25)
+test_acc0$all.stats
+
+test_max_Ftot <- rosnerTest(all_days_F$max_Ftot, k=1)
+test_max_Ftot$all.stats
+
+test_Fx_maxFtot <- rosnerTest(all_days_F$Fx_maxFtot, k=1)
+test_Fx_maxFtot$all.stats
+
+test_Fy_maxFtot  <- rosnerTest(all_days_F$Fy_maxFtot, k=9)
+test_Fy_maxFtot$all.stats
+
+```
+#### a. outliers - infrareds
+```{r}
+
+
+test_v1 <- rosnerTest(all_days_ir$v1, k = 5)
+test_v1$all.stats
+
+test_v2 <- rosnerTest(all_days_ir$v2, k = 9)
+test_v2$all.stats
+
+test_v4 <- rosnerTest(all_days_ir$v4, k = 8)
+test_v4$all.stats
+
+test_acc1 <- rosnerTest(all_days_ir$acc1, k=16)
+test_acc1$all.stats 
+
+test_acc2<- rosnerTest(all_days_ir$acc2, k=16)
+test_acc2$all.stats 
+
+test_acc3 <- rosnerTest(all_days_ir$acc3, k=68)
+test_acc3$all.stats
+
+```
+
+```{r}
+test_exits <- rosnerTest(all_days_ir$exit_s, k = 68)
+#more
+test_exits$all.stats
+
+test_v3 <- rosnerTest(all_days_ir$v3, k = 68)
+test_v3$all.stats #more
+```
+
+#### b.1. collecting outlier row numbers
+```{R}
+#no outliers in bodyweight
+#F
+out_acc0 <- test_acc0$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_max_Ftot <- test_max_Ftot$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_Fx <- test_Fx_maxFtot$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_Fy <- test_Fy_maxFtot$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+
+
+#IR
+out_exits <- test_exits$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_v1 <- test_v1$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_v2 <- test_v2$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_v3 <- test_v3$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_v4 <- test_v4$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_acc1 <- test_acc1$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_acc2 <- test_acc2$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+out_acc3 <- test_acc3$all.stats %>%
+  filter(Outlier == "TRUE") %>%
+  select(Obs.Num)
+
+outliers_F <-rbind(out_acc0, out_max_Ftot, out_Fx, out_Fy)
+outliers_IR <- rbind(out_exits, out_v1, out_v2, out_v3, out_v4, out_acc1, out_acc2, out_acc3) %>%
+  distinct
+dim(outliers_F) #36 outliers
+dim(outliers_IR)
+ #194 outliers
+
+```
+
+
+#### c. datasets without outliers
+```{r}
+force.out <- all_days_F[-c(outliers_F$Obs.Num),]
+ir.out <- all_days_ir[-c(outliers_IR$Obs.Num),]
+dim(ir.out) #7645
+dim(force.out) #11408
+```
+
+
+
+
+## B ->A?. data polishing
+### 4. dataset balancing
+```{r}
+#date
+force.out$date <- as.character(force.out$date)
+ir.out$date <- as.character(ir.out$date)
+
+# Define mapping for date labels
+date_map <- c("2024-12-11" = "Dec12", "2024-12-12" = "Dec12", "2024-12-13" = "Dec12","2024-12-14" = "Dec15", "2024-12-15" = "Dec15", "2024-12-16" = "Dec15","2024-12-22" = "Dec23", "2024-12-23" = "Dec23", "2024-12-24" = "Dec23","2024-12-30" = "Dec31", "2024-12-31" = "Dec31", "2025-01-01" = "Dec31","2025-01-02" = "Jan3", "2025-01-03" = "Jan3", "2025-01-04" = "Jan3","2025-01-20" = "Jan21", "2025-01-21" = "Jan21", "2025-01-22" = "Jan21","2025-01-23" = "Jan24", "2025-01-24" = "Jan24", "2025-01-25" = "Jan24","2025-01-29" = "Jan30", "2025-01-30" = "Jan30", "2025-01-31" = "Jan30","2025-02-05" = "Feb6", "2025-02-06" = "Feb6", "2025-02-07" = "Feb6","2025-02-11" = "Feb12", "2025-02-12" = "Feb12", "2025-02-13" = "Feb12","2025-02-15" = "Feb16", "2025-02-16" = "Feb16", "2025-02-17" = "Feb16","2025-02-18" = "Feb19", "2025-02-19" = "Feb19", "2025-02-20" = "Feb19")
+
+# Assign labels to the dataframe using the mapping
+force.out$date_label <- date_map[as.character(force.out$date)]
+ir.out$date_label <- date_map[as.character(ir.out$date)]
+
+
+#subset by species
+force.out.greti <- subset(force.out, species == "greti") 
+
+
+force.out.bluti <- subset(force.out, species == "bluti")
+
+ir.out.greti <- subset(ir.out, species == "greti")
+ir.out.bluti <- subset(ir.out, species == "bluti")
+```
+```{r}
+#looking if good amount of individuals are present for all days 
+count_table_greti <- force.out.greti %>%
+  group_by(id, day_since) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = day_since, values_from = count, values_fill = list(count = 0))
+
+print(count_table_greti)
+
+count_table_bluti <- force.out.bluti %>%
+  group_by(id, day_since) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = day_since, values_from = count, values_fill = list(count = 0))
+
+print(count_table_bluti)
+
+#dataset balancing 
+
+# enforced a bit stronger criteria as 14g might be two blue tit or 1.5 blue tits. 
+force.out.bluti_bal <- force.out.bluti %>% filter(int_acc <50) %>% filter(bodyweight > 8 & bodyweight < 13) %>% group_by(id) %>%
+filter(all(c(-1, 0, 1) %in% day_since)) %>% na.omit() %>% ungroup()
+
+ir.out.bluti_bal <- ir.out.bluti %>% filter(!date_label %in% c("Feb16","Feb19","Jan30")) %>% group_by(id) %>%
+filter(all(c(-1, 0, 1) %in% day_since)) %>% na.omit() %>% ungroup()
+
+#the dates where there is only one data point or not balanced
+force.out.greti_bal <- force.out.greti %>% filter(!date_label %in% c("Dec23","Jan21","Jan30")) %>% group_by(id) %>%
+filter(all(c(-1, 0, 1) %in% day_since)) %>% na.omit() %>% ungroup()
+
+ir.out.greti_bal <- ir.out.greti %>% filter(!date_label %in% c("Dec23","Feb16","Feb19","Jan21","Jan30")) %>%group_by(id) %>%
+filter(all(c(-1, 0, 1) %in% day_since)) %>% na.omit() %>% ungroup()
+
+dim(force.out.bluti)
+dim(force.out.bluti_bal) #3,126 flights out, 64% 
+
+dim(ir.out.bluti)
+dim(ir.out.bluti_bal) #1,455 flights out, 72%
+
+dim(force.out.greti)
+dim(force.out.greti_bal) #908 flights out, 76%
+
+dim(ir.out.greti)
+dim(ir.out.greti_bal) #957 flights out, 63%
+
+```
+```{r}
+
+force.out.bluti_bal_table <- force.out.bluti_bal %>%
+  group_by(id) %>%
+  summarise(visits = n()) %>%
+  summarise(
+    indiv.no = n(),
+    flight.total = sum(visits),
+    mean.visits = mean(visits),
+    sd.visits = sd(visits)
+  )
+
+force.out.greti_bal_table <- force.out.greti_bal %>%
+  group_by(id) %>%
+  summarise(visits = n()) %>%
+  summarise(
+    indiv.no = n(),
+    flight.total = sum(visits),
+    mean.visits = mean(visits),
+    sd.visits = sd(visits)
+  )
+
+ir.out.bluti_bal_table <- ir.out.bluti_bal %>%
+  group_by(id) %>%
+  summarise(visits = n()) %>%
+  summarise(
+    indiv.no = n(),
+    flight.total = sum(visits),
+    mean.visits = mean(visits),
+    sd.visits = sd(visits)
+  )
+
+ir.out.greti_bal_table <- ir.out.greti_bal %>%
+  group_by(id) %>%
+  summarise(visits = n()) %>%
+  summarise(
+    indiv.no = n(),
+    flight.total = sum(visits),
+    mean.visits = mean(visits),
+    sd.visits = sd(visits)
+  )
+
+force.out.bluti_bal_table
+force.out.greti_bal_table
+ir.out.bluti_bal_table
+ir.out.greti_bal_table
+```
+#### indiv visiting number
+```{r}
+indiv_visit_no <- force.out.bluti_bal %>%
+  count(date_label, id, day_since, group) %>%
+  pivot_wider(names_from = day_since, values_from = n, values_fill = list(n = 0))
+colnames(indiv_visit_no)[4:6] <- c("day-1", "day0", "day1")
+
+
+indiv_visit_no_more <-indiv_visit_no %>%
+  filter(`day-1` >10 & day0 >10 & day1 >10)
+
+
+# Randomly pick 5 rows
+random_rows <- indiv_visit_no_more %>% sample_n(5)
+random_rows
+```
+#### number of visiting dates per individual
+```{r}
+
+dates_visited <- force.out.bluti_bal %>%
+  group_by(id) %>%
+  summarise(unique_dates = n_distinct(date)) %>%
+  summarise(
+    mean_unique_dates = mean(unique_dates),
+    sd_unique_dates = sd(unique_dates)
+  )
+
+dates_visited
+```
+
+### 5. checking correlations
+#### 5.a. na checks
+```{r}
+na_counts <- force.out.bluti_bal %>%
+     select_if(is.numeric) %>%
+      summarise_all(~ sum(is.na(.)))
+na_counts
+```
+
+#### 5.b. correlation checks (can skip)
+- understanbly high correlation between celsius.now x celsius.12 (12 hours before) and hr x flight_no but no one dangerously high enough to omit
+- 
+```{r}
+
+#need 'id', 'exp_order', 'hr', 'bodyweight'
+usr <- par("usr") 
+par(usr=usr)
+
+
+force.out.bluti_bal$prev_scares <-as.numeric(force.out.bluti_bal$prev_scares)
+force.out.bluti_bal$flight_no <- as.numeric(force.out.bluti_bal$flight_no)
+
+ir.out.bluti_bal$prev_scares <-as.numeric(ir.out.bluti_bal$prev_scares)
+ir.out.bluti_bal$flight_no <- as.numeric(ir.out.bluti_bal$flight_no)
+
+force.out.greti_bal$prev_scares <-as.numeric(force.out.greti_bal$prev_scares)
+force.out.greti_bal$flight_no <- as.numeric(force.out.greti_bal$flight_no)
+
+ir.out.greti_bal$prev_scares <-as.numeric(ir.out.greti_bal$prev_scares)
+ir.out.greti_bal$flight_no <- as.numeric(ir.out.greti_bal$flight_no)
+
+
+#for some reason 'celsius' not charting 
+force.out.bluti_bal_corcheck <- force.out.bluti_bal %>% select( 'day_since','bodyweight','scare_outcome','celsius.now', 'celsius.12hr','hr', 'prev_scares', 'flight_no')
+cor.chart_bluti_F = chart.Correlation(force.out.bluti_bal_corcheck, histogram=TRUE, pch=19)
+
+
+
+ir.out.bluti_bal_corcheck <- ir.out.bluti_bal %>% select( 'day_since','scare_outcome','celsius.now', 'celsius.12hr','hr', 'prev_scares','flight_no')
+cor.chart_bluti_ir = chart.Correlation(ir.out.bluti_bal_corcheck, histogram=TRUE, pch=19)
+
+
+
+
+force.out.greti_bal_corcheck <- force.out.greti_bal %>% select( 'day_since','bodyweight','scare_outcome','celsius.now', 'celsius.12hr','hr', 'prev_scares', 'flight_no' )
+cor.chart_greti_F = chart.Correlation(force.out.greti_bal_corcheck, histogram=TRUE, pch=19)
+
+
+ir.out.greti_bal_corcheck <- ir.out.greti_bal %>% select( 'day_since','scare_outcome','celsius.now', 'celsius.12hr','hr', 'prev_scares','flight_no' )
+cor.chart_greti_ir = chart.Correlation(ir.out.greti_bal_corcheck, histogram=TRUE, pch=19)
+
+```
+
+### 6. datasets typing
+```{r}
+
+#scare_outcome (to character)
+force.out.bluti_bal$scare_outcome <- as.character(force.out.bluti_bal$scare_outcome)
+ir.out.bluti_bal$scare_outcome <- as.character(ir.out.bluti_bal$scare_outcome)
+
+force.out.greti_bal$scare_outcome <- as.character(force.out.greti_bal$scare_outcome)
+ir.out.greti_bal$scare_outcome <- as.character(ir.out.greti_bal$scare_outcome)
+
+#age (to character)
+force.out.bluti_bal$age <- as.character(force.out.bluti_bal$age)
+ir.out.bluti_bal$age <- as.character(ir.out.bluti_bal$age)
+
+force.out.greti_bal$age <- as.character(force.out.greti_bal$age)
+ir.out.greti_bal$age <- as.character(ir.out.greti_bal$age)
+
+#month (to character)
+force.out.bluti_bal$month <- as.character(force.out.bluti_bal$month)
+ir.out.bluti_bal$month <- as.character(ir.out.bluti_bal$month)
+
+force.out.greti_bal$month <- as.character(force.out.greti_bal$month)
+ir.out.greti_bal$month <- as.character(ir.out.greti_bal$month)
+
+#day_since (to character)
+force.out.bluti_bal$day_since <- as.character(force.out.bluti_bal$day_since)
+ir.out.bluti_bal$day_since <- as.character(ir.out.bluti_bal$day_since)
+
+force.out.greti_bal$day_since <- as.character(force.out.greti_bal$day_since)
+ir.out.greti_bal$day_since <- as.character(ir.out.greti_bal$day_since)
+
+# making group -> exp_group so that marginal effect packages are happy 
+force.out.greti_bal <- force.out.greti_bal %>%
+  rename(exp_group = group)
+force.out.bluti_bal <- force.out.bluti_bal %>%
+  rename(exp_group = group)
+
+ir.out.greti_bal<- ir.out.greti_bal %>%
+  rename(exp_group = group)
+ir.out.bluti_bal<- ir.out.bluti_bal %>%
+  rename(exp_group = group)
+
+# changing 'scare_outcome' 
+
+
+force.out.bluti_bal$scare_outcome <- factor(force.out.bluti_bal$scare_outcome, levels = c(0, 1), labels = c("normal", "escape"))
+
+force.out.greti_bal$scare_outcome <- factor(force.out.greti_bal$scare_outcome, levels = c(0, 1), labels = c("normal", "escape"))
+
+ir.out.bluti_bal$scare_outcome <- factor(ir.out.bluti_bal$scare_outcome, levels = c(0, 1), labels = c("normal", "escape"))
+
+ir.out.greti_bal$scare_outcome <- factor(ir.out.greti_bal$scare_outcome, levels = c(0, 1), labels = c("normal", "escape"))
+
+
+
+
+```
+
+
+## C. Check assumption graphs 
+### BLUTI {.tabset} 
+
+### *control vs. treatment*
+#### bodyweight
+##### model assumption
+```{r}
+
+lmer_bw_bluti_group = lmer(bodyweight ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal)
+
+check_collinearity(lmer_bw_bluti_group)
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_bw <- compute_redres(lmer_bw_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_bw) #normality in histogram
+plot_redres(lmer_bw_bluti_group) #heteroskedasticity
+plot_resqq(lmer_bw_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_bw_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_bw_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_bw_bluti_group = lmer(bodyweight ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+rlmer_bw_bluti_group = rlmer(bodyweight ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+summary(rlmer_bw_bluti_group)
+plot(rlmer_bw_bluti_group)
+```
+
+```{r}
+rlmer2_bw_group <- update(rlmer_bw_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.66 
+```
+
+```{r}
+rlmer3_bw_group <- update(rlmer2_bw_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_bw_bluti_group, rlmer_bw_bluti_group, rlmer2_bw_group, rlmer3_bw_group, show.rho.functions = FALSE)
+#0.497, 0.344, 0.347, 0.382. just rlmer
+```
+###### tab_model
+```{r}
+tab_model(rlmer_bw_bluti_group)
+
+tab_model(lmer_bw_bluti_group)
+```
+###### plot 
+```{r}
+
+#scare response
+rlmer_bw_scare_predict <- predict_response(rlmer_bw_bluti_group, "scare_outcome", margin = "empirical")
+lmer_bw_scare_predict <- predict_response(lmer_bw_bluti_group, "scare_outcome", margin = "mean_reference")
+
+##rlmer
+bw_scare <- plot(rlmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),  # normal vs.escape
+    axis.text.y = element_text(size = 18)   # tick marks 
+  )
+
+
+##lmer
+bw_scare_lmer <- plot(lmer_bw_scare_predict)+ labs(x ="", y = "bodyweight (g)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),
+    axis.text.x = element_text(size = 18),  # normal vs.escape
+    axis.text.y = element_text(size = 18)   # tick marks 
+  ) 
+
+bw_scare
+bw_scare_lmer
+
+#group response
+##rlmer
+rlmer_bw_bluti_predict <- predict_response(rlmer_bw_bluti_group, c("day_since","exp_group"),margin = "empirical")
+bw_group <- plot(rlmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7"))+ theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+##lmer
+lmer_bw_bluti_predict <- predict_response(lmer_bw_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+bw_group_lmer <- plot(lmer_bw_bluti_predict) + labs(x = "", y = "bodyweight (g)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) +theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+bw_group
+bw_group_lmer
+
+## interaction effect 
+rlmer_bw_bluti_interact <- predict_response(rlmer_bw_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_bw_bluti_interact <- predict_response(lmer_bw_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000, pbkrtest.limit = 6000, lmerTest.limit = 6000)
+set.seed(1603)
+
+test_predictions(rlmer_bw_scare_predict)
+test_predictions(lmer_bw_scare_predict)
+
+test_predictions(rlmer_bw_bluti_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_bw_bluti_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+
+test_predictions(rlmer_bw_bluti_interact, test = "interaction", p_adjust = "sidak")
+test_predictions(lmer_bw_bluti_interact, test = "interaction", p_adjust = "sidak")
+
+# no 
+```
+
+
+
+
+#### peak_force
+##### model assumption
+```{r}
+
+lmer_maxF_bluti_group = lmer(max_Ftot ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_maxF <- compute_redres(lmer_maxF_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_maxF) #normality in histogram
+plot_redres(lmer_maxF_bluti_group) #heteroskedasticity
+plot_resqq(lmer_maxF_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_maxF_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_maxF_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_maxF_bluti_group = lmer(max_Ftot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+rlmer_maxF_bluti_group = rlmer(max_Ftot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+summary(rlmer_maxF_bluti_group)
+plot(rlmer_maxF_bluti_group)
+```
+
+```{r}
+rlmer2_maxF_group <- update(rlmer_maxF_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.69 
+```
+
+```{r}
+rlmer3_maxF_group <- update(rlmer2_maxF_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_maxF_bluti_group, rlmer_maxF_bluti_group, rlmer2_maxF_group, rlmer3_maxF_group, show.rho.functions = FALSE)
+#0.125, 0.133, 0.129, 0.127. 
+```
+###### tab_model
+```{r}
+tab_model(rlmer3_maxF_bluti_group)
+
+tab_model(lmer_maxF_bluti_group) #lmer actually most parsimonious
+```
+###### plot 
+```{r}
+#scare_outcome
+rlmer_maxF_scare_predict <- predict_response(rlmer3_maxF_group, "scare_outcome", margin = "empirical")
+maxF_scare <- plot(rlmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+lmer_maxF_scare_predict <- predict_response(lmer_maxF_bluti_group, "scare_outcome", margin = "mean_reference")
+#mean_reference works. not empirical. why? 
+maxF_scare_lmer <- plot(lmer_maxF_scare_predict) + labs(x ="", y = "max F (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+maxF_scare
+maxF_scare_lmer
+
+#within and between groups
+rlmer_maxF_group_predict <- predict_response(rlmer3_maxF_group, c("day_since","exp_group"),margin = "empirical")
+lmer_maxF_group_predict <- predict_response(lmer_maxF_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+maxF_group <- plot(rlmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+maxF_group_lmer <- plot(lmer_maxF_group_predict) + labs(x = "", y = "max F (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+maxF_group
+maxF_group_lmer
+
+rlmer_maxF_group_interact <- predict_response(rlmer3_maxF_group, c("day_since","exp_group"), margin = "marginalmeans")
+lmer_maxF_group_interact <- predict_response(lmer_maxF_bluti_group, c("day_since","exp_group"), margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(3623)
+#, pbkrtest.limit = 6000
+test_predictions(rlmer_maxF_scare_predict)
+test_predictions(lmer_maxF_scare_predict)
+
+
+test_predictions(rlmer_maxF_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_maxF_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#within-group difference on the experimental day for both control & treatment groups 
+
+test_predictions(rlmer_maxF_group_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_maxF_group_interact, test = "interaction", p_adjust = "sidak") 
+
+# there is a difference between treatment vs. control group on day 0. 
+```
+
+#### Fx
+##### model assumption
+```{r}
+
+lmer_Fx_bluti_group = lmer(Fx_maxFtot ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_Fx <- compute_redres(lmer_Fx_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_Fx) #normality in histogram
+plot_redres(lmer_Fx_bluti_group) #heteroskedasticity
+plot_resqq(lmer_Fx_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_Fx_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_maxF_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_Fx_bluti_group = lmer(Fx_maxFtot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+rlmer_Fx_bluti_group = rlmer(Fx_maxFtot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+summary(rlmer_Fx_bluti_group)
+plot(rlmer_Fx_bluti_group)
+```
+
+```{r}
+rlmer2_Fx_group <- update(rlmer_Fx_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.66 
+#warning
+```
+
+```{r}
+rlmer3_Fx_group <- update(rlmer2_Fx_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_Fx_bluti_group, rlmer_Fx_bluti_group, rlmer2_Fx_group, rlmer3_Fx_group, show.rho.functions = FALSE)
+#0.115, 0.0994, 0.0995, 0.105. just rlmer
+```
+###### tab_model
+```{r}
+tab_model(rlmer_Fx_bluti_group)
+```
+###### plot 
+```{r}
+# scare comparison 
+rlmer_Fx_scare_predict <- predict_response(rlmer_Fx_bluti_group, "scare_outcome",margin = "empirical")
+lmer_Fx_scare_predict <- predict_response(lmer_Fx_bluti_group, "scare_outcome",margin = "mean_reference")
+
+Fx_scare <- plot(rlmer_Fx_scare_predict) + labs(x ="", y = "Fx (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fx_scare_lmer <- plot(lmer_Fx_scare_predict) + labs(x= "", y = "Fx (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fx_scare
+Fx_scare_lmer
+
+# group comparison
+rlmer_Fx_group_predict <- predict_response(rlmer_Fx_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_Fx_group_predict <- predict_response(lmer_Fx_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+Fx_group <- plot(rlmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fx_group_lmer <- plot(lmer_Fx_group_predict)+ labs(x = "", y = "Fx (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fx_group
+Fx_group_lmer
+
+rlmer_Fx_bluti_interact <- predict_response(rlmer_Fx_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_Fx_bluti_interact <- predict_response(lmer_Fx_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(15603)
+
+test_predictions(rlmer_Fx_scare_predict)
+test_predictions(lmer_Fx_scare_predict)
+
+
+test_predictions(rlmer_Fx_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_Fx_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#within-individual significantly different on the experimental day. 
+
+test_predictions(rlmer_Fx_bluti_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_Fx_bluti_interact, test = "interaction", p_adjust = "sidak") 
+
+# control vs. treatment significantly different on the day. 
+```
+#### Fy
+##### model assumption
+```{r}
+
+lmer_Fy_bluti_group = lmer(-Fy_maxFtot ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_Fy <- compute_redres(lmer_Fy_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_Fy) #normality in histogram
+plot_redres(lmer_Fy_bluti_group) #heteroskedasticity
+plot_resqq(lmer_Fy_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_Fy_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_Fy_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_Fy_bluti_group = lmer(-Fy_maxFtot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+rlmer_Fy_bluti_group = rlmer(-Fy_maxFtot ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+summary(rlmer_Fy_bluti_group)
+plot(rlmer_Fy_bluti_group)
+```
+
+```{r}
+rlmer2_Fy_group <- update(rlmer_Fy_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.69)) #both fixed and random effects -> k = 1.69 
+```
+
+```{r}
+rlmer3_Fy_group <- update(rlmer2_Fy_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_Fy_bluti_group, rlmer_Fy_bluti_group, rlmer2_Fy_group, rlmer3_Fy_group, show.rho.functions = FALSE)
+#0.129, 0.131, 0.128, 0.129 rlmer2
+```
+###### tab_model
+```{r}
+tab_model(rlmer2_Fy_group)
+tab_model(lmer_Fy_bluti_group)
+```
+###### plot 
+```{r}
+#scare_outcome
+rlmer_Fy_scare_predict <- predict_response(rlmer2_Fy_group, "scare_outcome",margin = "empirical")
+lmer_Fy_scare_predict <- predict_response(lmer_Fy_bluti_group, "scare_outcome",margin = "mean_reference")
+
+Fy_scare <- plot(rlmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+Fy_scare_lmer <- plot(lmer_Fy_scare_predict) + labs(x ="", y = "Fy (N)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fy_scare
+Fy_scare_lmer
+
+#group
+rlmer_Fy_group_predict <- predict_response(rlmer2_Fy_group, c("day_since","exp_group"),margin = "empirical")
+lmer_Fy_group_predict <- predict_response(lmer_Fy_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+
+Fy_group <- plot(rlmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fy_group_lmer <- plot(lmer_Fy_group_predict) + labs(x = "", y = "Fy (N)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+Fy_group
+Fy_group_lmer
+
+#interaction
+rlmer_Fy_bluti_interact <- predict_response(rlmer2_Fy_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_Fy_bluti_interact <- predict_response(lmer_Fy_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(3602935)
+
+#scare_outcome
+test_predictions(rlmer_Fy_scare_predict)
+test_predictions(lmer_Fy_scare_predict)
+
+#group
+test_predictions(rlmer_Fy_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_Fy_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+#within-group significant on day 0
+
+test_predictions(rlmer_Fy_bluti_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_Fy_bluti_interact, test = "interaction", p_adjust = "sidak") 
+
+# -1 -> 0 significant (0.024). 0 to 1 less significant (p = 0.055)
+```
+#### int_acc (acc0)
+##### model assumption
+```{r}
+
+lmer_acc0_bluti_group = lmer(int_acc ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_acc0 <- compute_redres(lmer_acc0_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_acc0) #normality in histogram
+plot_redres(lmer_acc0_bluti_group) #heteroskedasticity
+plot_resqq(lmer_acc0_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_acc0_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_acc0_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_acc0_bluti_group = lmer(int_acc ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+rlmer_acc0_bluti_group = rlmer(int_acc ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = force.out.bluti_bal)
+
+summary(rlmer_acc0_bluti_group)
+plot(rlmer_acc0_bluti_group)
+```
+
+```{r}
+rlmer2_acc0_group <- update(rlmer_acc0_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.66), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.66 
+```
+
+```{r}
+rlmer3_acc0_group <- update(rlmer2_acc0_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_acc0_bluti_group, rlmer_acc0_bluti_group, rlmer2_acc0_group, rlmer3_acc0_group, show.rho.functions = FALSE)
+#12.1, 13, 12.6, 12.3
+```
+###### tab_model
+```{r}
+tab_model(rlmer3_acc0_group)
+tab_model(lmer_acc0_bluti_group)
+```
+###### plot 
+```{r}
+rlmer_acc0_scare_predict <- predict_response(rlmer3_acc0_group, "scare_outcome", margin = "empirical")
+lmer_acc0_scare_predict <- predict_response(lmer_acc0_bluti_group, "scare_outcome", margin = "mean_reference")
+
+acc0_scare <- plot(rlmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc0_scare_lmer <- plot(lmer_acc0_scare_predict) + labs(x ="", y = "acc0 (m/s^2)", title = "") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc0_scare
+acc0_scare_lmer
+
+rlmer_acc0_group_predict <- predict_response(rlmer3_acc0_group, c("day_since","exp_group"), margin = "empirical")
+
+acc0_group <- plot(rlmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )  
+
+lmer_acc0_group_predict <- predict_response(lmer_acc0_bluti_group, c("day_since","exp_group"), margin = "mean_reference")
+
+acc0_group_lmer <- plot(lmer_acc0_group_predict)+ labs(x = "", y = "acc0 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  ) 
+ 
+acc0_group
+acc0_group_lmer
+
+rlmer_acc0_group_interact <- predict_response(rlmer3_acc0_group, c("day_since","exp_group"), margin = "marginalmeans")
+lmer_acc0_group_interact <- predict_response(lmer_acc0_bluti_group, c("day_since","exp_group"), margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(19703)
+#scare
+test_predictions(rlmer_acc0_scare_predict)
+test_predictions(lmer_acc0_scare_predict)
+
+#group
+
+test_predictions(rlmer_acc0_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_acc0_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#treatment significant for day0
+#control -1 vs. 0 <0.001
+#control 0 vs. 1 0.072
+
+test_predictions(rlmer_acc0_group_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_acc0_group_interact, test = "interaction", p_adjust = "sidak") 
+
+#-1 vs. 0  0.063
+# 0 vs. 1  0.043
+```
+#### v1
+##### model assumption
+```{r}
+
+lmer_v1_bluti_group = lmer(v1 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_v1 <- compute_redres(lmer_v1_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_v1) #normality in histogram
+plot_redres(lmer_v1_bluti_group) #heteroskedasticity
+plot_resqq(lmer_v1_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_v1_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_v1_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_v1_bluti_group = lmer(v1 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_v1_bluti_group = rlmer(v1 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_v1_bluti_group)
+plot(rlmer_v1_bluti_group)
+```
+
+```{r}
+rlmer2_v1_group <- update(rlmer_v1_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.69
+```
+
+```{r}
+rlmer3_v1_group <- update(rlmer2_v1_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_v1_bluti_group, rlmer_v1_bluti_group, rlmer2_v1_group, rlmer3_v1_group, show.rho.functions = FALSE)
+#0.365, 0.269, 0.313, 0.355
+```
+###### tab_model
+```{r}
+tab_model(rlmer_v1_bluti_group)
+tab_model(lmer_v1_bluti_group)
+```
+###### plot 
+```{r}
+#scare
+rlmer_v1_scare_predict <- predict_response(rlmer3_v1_group, "scare_outcome", margin = "empirical")
+lmer_v1_scare_predict <- predict_response(lmer_v1_bluti_group, "scare_outcome", margin = "mean_reference")
+
+
+v1_scare <- plot(rlmer_v1_scare_predict) + labs(title = "", x ="", y = "v1 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v1_scare_lmer <- plot(lmer_v1_scare_predict) + labs(title = "", x = "", y = "v1 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v1_scare
+v1_scare_lmer
+
+#group
+rlmer_v1_group_predict <- predict_response(rlmer3_v1_group, c("day_since","exp_group"),margin = "empirical")
+lmer_v1_group_predict <- predict_response(lmer_v1_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+
+v1_group <- plot(rlmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v1_group_lmer <- plot(lmer_v1_group_predict)+ labs(x = "day since experiment", y = "v1 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v1_group 
+v1_group_lmer
+
+rlmer_v1_group_interact <- predict_response(rlmer3_v1_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_v1_group_interact <- predict_response(lmer_v1_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(8201)
+#scare
+
+test_predictions(rlmer_v1_scare_predict)
+test_predictions(lmer_v1_scare_predict)
+
+
+#group
+test_predictions(rlmer_v1_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_v1_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#no difference within group
+test_predictions(rlmer_v1_group_interact, test = "interaction", p_adust = "sidak") 
+test_predictions(lmer_v1_group_interact, test = "interaction", p_adust = "sidak") 
+
+#no interaction effect
+```
+#### v2
+##### model assumption
+```{r}
+
+lmer_v2_bluti_group = lmer(v2 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_v2 <- compute_redres(lmer_v2_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_v2) #normality in histogram
+plot_redres(lmer_v2_bluti_group) #heteroskedasticity
+plot_resqq(lmer_v2_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_v2_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_v2_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_v2_bluti_group = lmer(v2 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_v2_bluti_group = rlmer(v2 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_v2_bluti_group)
+plot(rlmer_v2_bluti_group)
+```
+
+```{r}
+rlmer2_v2_group <- update(rlmer_v2_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.66), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.66 
+```
+
+```{r}
+rlmer3_v2_group <- update(rlmer2_v2_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_v2_bluti_group, rlmer_v2_bluti_group, rlmer2_v2_group, rlmer3_v2_group, show.rho.functions = FALSE)
+#0.337, 0.141, 0.165, 0.284
+```
+###### tab_model
+```{r}
+tab_model(rlmer_v2_bluti_group)
+tab_model(lmer_v2_bluti_group)
+```
+###### plot 
+```{r}
+#scare outcome
+rlmer_v2_scare_predict <- predict_response(rlmer_v2_bluti_group, "scare_outcome", margin = "empirical")
+lmer_v2_scare_predict <- predict_response(lmer_v2_bluti_group, "scare_outcome", margin = "mean_reference")
+
+v2_scare <- plot(rlmer_v2_scare_predict) + labs(title = "", x ="", y = "v2 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v2_scare_lmer <- plot(lmer_v2_scare_predict) + labs(title = "", x = "", y = "v2 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v2_scare
+v2_scare_lmer
+
+
+#group-level
+rlmer_v2_group_predict <- predict_response(rlmer_v2_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_v2_group_predict <- predict_response(lmer_v2_bluti_group, c("day_since","exp_group"), margin = "mean_reference")
+
+v2_group <- plot(rlmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v2_group_lmer <- plot(lmer_v2_group_predict)+ labs(x = "day since experiment", y = "v2 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v2_group 
+v2_group_lmer
+
+rlmer_v2_group_interact <- predict_response(rlmer_v2_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_v2_group_interact <- predict_response(lmer_v2_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(63498)
+#scare
+test_predictions(rlmer_v2_scare_predict)
+test_predictions(lmer_v2_scare_predict)
+
+
+#group
+test_predictions(rlmer_v2_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_v2_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+
+#no difference within group
+test_predictions(rlmer_v2_group_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_v2_group_interact, test = "interaction", p_adjust = "sidak") 
+
+#no interaction effect
+```
+#### v3
+##### model assumption
+```{r}
+
+lmer_v3_bluti_group = lmer(v3 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_v3 <- compute_redres(lmer_v3_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_v3) #normality in histogram
+plot_redres(lmer_v3_bluti_group) #heteroskedasticity
+plot_resqq(lmer_v3_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_v3_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_v3_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_v3_bluti_group = lmer(v3 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_v3_bluti_group = rlmer(v3 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_v3_bluti_group)
+#probably singular
+plot(rlmer_v3_bluti_group)
+```
+
+```{r}
+rlmer2_v3_group <- update(rlmer_v3_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.69)) #both fixed and random effects -> k = 1.66
+#lots of warning
+```
+
+```{r}
+rlmer3_v3_group <- update(rlmer2_v3_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_v3_bluti_group, rlmer_v3_bluti_group, rlmer2_v3_group, rlmer3_v3_group, show.rho.functions = FALSE)
+#0.17, 0.101, 0.102, 0.113
+```
+###### tab_model
+```{r}
+tab_model(rlmer_v3_bluti_group)
+tab_model(lmer_v3_bluti_group)
+```
+###### plot 
+```{r}
+#scare_outcome
+rlmer_v3_scare_predict <- predict_response(rlmer_v3_bluti_group, "scare_outcome", margin = "empirical")
+lmer_v3_scare_predict <- predict_response(lmer_v3_bluti_group, "scare_outcome", margin = "mean_reference")
+
+v3_scare <- plot(rlmer_v3_scare_predict) + labs(title = "", x ="", y = "v3 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v3_scare_lmer <- plot(lmer_v3_scare_predict) + labs(title = "", x ="", y = "v3 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+ 
+v3_scare
+v3_scare_lmer
+
+#group
+rlmer_v3_group_predict <- predict_response(rlmer_v3_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_v3_group_predict <- predict_response(lmer_v3_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+v3_group <- plot(rlmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v3_group_lmer <- plot(lmer_v3_group_predict) + labs(x = "day since experiment", y = "v3 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v3_group 
+v3_group_lmer
+
+rlmer_v3_group_interact <- predict_response(rlmer_v3_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_v3_group_interact <- predict_response(lmer_v3_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+
+#scare
+test_predictions(rlmer_v3_scare_predict)
+test_predictions(lmer_v3_scare_predict)
+
+
+#group
+test_predictions(rlmer_v3_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_v3_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#control: -1 vs. 0 -> 0.039. estimate 0.01 m /s 
+#no effect 
+
+test_predictions(rlmer_v3_group_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_v3_group_interact, test = "interaction", p_adjust = "sidak") 
+
+#no interaction effect
+```
+#### v4
+##### model assumption
+```{r}
+
+lmer_v4_bluti_group = lmer(v4 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_v4 <- compute_redres(lmer_v4_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_v4) #normality in histogram
+plot_redres(lmer_v4_bluti_group) #heteroskedasticity
+plot_resqq(lmer_v4_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_v4_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_v4_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_v4_bluti_group = lmer(v4 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_v4_bluti_group = rlmer(v4 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_v4_bluti_group)
+#probably singular
+plot(rlmer_v4_bluti_group)
+```
+
+```{r}
+rlmer2_v4_group <- update(rlmer_v4_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.66), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.69)) #both fixed and random effects -> k = 1.69
+#lots of warning
+```
+
+```{r}
+rlmer3_v4_group <- update(rlmer2_v4_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_v4_bluti_group, rlmer_v4_bluti_group, rlmer2_v4_group, rlmer3_v4_group, show.rho.functions = FALSE)
+#0.424, 0.114, 0.118, 0.14
+```
+###### tab_model
+```{r}
+tab_model(rlmer_v4_bluti_group)
+tab_model(lmer_v4_bluti_group)
+```
+###### plot 
+```{r}
+#scare
+rlmer_v4_scare_predict <- predict_response(rlmer_v4_bluti_group, "scare_outcome", margin = "empirical")
+lmer_v4_scare_predict <- predict_response(lmer_v4_bluti_group, "scare_outcome", margin = "mean_reference")
+
+
+v4_scare <- plot(rlmer_v4_scare_predict) + labs(title = "", x ="", y="v4 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+v4_scare_lmer <- plot(lmer_v4_scare_predict) + labs(title = "", x ="", y="v4 (m/s)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+
+v4_scare
+v4_scare_lmer
+
+#group
+rlmer_v4_group_predict <- predict_response(rlmer_v4_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_v4_group_predict <- predict_response(lmer_v4_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+
+v4_group <- plot(rlmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+
+v4_group_lmer <- plot(lmer_v4_group_predict)+ labs(x = "day since experiment", y = "v4 (m/s)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+v4_group 
+v4_group_lmer
+
+rlmer_v4_group_interact <- predict_response(rlmer_v4_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_v4_group_interact <- predict_response(lmer_v4_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(36794)
+#scare
+test_predictions(rlmer_v4_scare_predict)
+test_predictions(lmer_v4_scare_predict)
+
+
+#group
+test_predictions(rlmer_v4_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_v4_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+#control: -1 vs.1 -> 0.024. estimate 0.01 m /s 
+#no effect 
+test_predictions(rlmer_v4_group_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_v4_group_interact, test = "interaction", p_adjust = "sidak") 
+
+#no interaction effect
+```
+
+
+
+
+#### acc1
+##### model assumption
+```{r}
+
+lmer_acc1_bluti_group = lmer(acc1 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_acc1 <- compute_redres(lmer_acc1_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_acc1) #normality in histogram
+plot_redres(lmer_acc1_bluti_group) #heteroskedasticity
+plot_resqq(lmer_acc1_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_acc1_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_acc1_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_acc1_bluti_group = lmer(acc1 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_acc1_bluti_group = rlmer(acc1 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_acc1_bluti_group)
+#probably singular
+plot(rlmer_acc1_bluti_group)
+```
+
+```{r}
+rlmer2_acc1_group <- update(rlmer_acc1_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.69
+
+```
+
+```{r}
+rlmer3_acc1_group <- update(rlmer2_acc1_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_acc1_bluti_group, rlmer_acc1_bluti_group, rlmer2_acc1_group, rlmer3_acc1_group, show.rho.functions = FALSE)
+#3.62, 3.42, 3.37, 3.44
+```
+###### tab_model
+```{r}
+tab_model(rlmer2_acc1_group)
+tab_model(lmer_acc1_bluti_group)
+```
+###### plot 
+```{r}
+
+#scare
+rlmer_acc1_scare_predict <- predict_response(rlmer2_acc1_group, "scare_outcome", margin = "empirical") 
+lmer_acc1_scare_predict <- predict_response(lmer_acc1_bluti_group, "scare_outcome", margin = "mean_reference")
+
+acc1_scare <- plot(rlmer_acc1_scare_predict) + labs(title = "", x = "", y = "acc1 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc1_scare_lmer <- plot(lmer_acc1_scare_predict) + labs(title = "", x = "", y = "acc1 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+
+acc1_scare
+acc1_scare_lmer
+
+#group
+
+rlmer_acc1_group_predict <- predict_response(rlmer2_acc1_group, c("day_since","exp_group"),margin = "empirical")
+lmer_acc1_group_predict <- predict_response(lmer_acc1_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+
+acc1_group <- plot(rlmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc1_group_lmer <- plot(lmer_acc1_group_predict)+ labs(x = "", y = "acc1 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc1_group 
+acc1_group_lmer
+
+rlmer_acc1_group_interact <- predict_response(rlmer2_acc1_group, c("day_since","exp_group"),margin = "marginalmeans")
+lmer_acc1_group_interact <- predict_response(lmer_acc1_bluti_group, c("day_since","exp_group"),margin = "marginalmeans")
+
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(8333)
+#scare
+test_predictions(rlmer_acc1_scare_predict)
+test_predictions(lmer_acc1_scare_predict)
+
+
+#group
+test_predictions(rlmer_acc1_group_predict, collapse_levels = TRUE)
+test_predictions(lmer_acc1_group_predict, collapse_levels = TRUE)
+
+
+#no effect - but estimates tend to be higher for control 
+test_predictions(rlmer_acc1_group_interact, test = "interaction") 
+test_predictions(lmer_acc1_group_interact, test = "interaction") 
+
+#no interaction effect
+```
+#### acc2
+##### model assumption
+```{r}
+
+lmer_acc2_bluti_group = lmer(acc2 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_acc2 <- compute_redres(lmer_acc2_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_acc2) #normality in histogram
+plot_redres(lmer_acc2_bluti_group) #heteroskedasticity
+plot_resqq(lmer_acc2_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_acc2_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_acc2_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+
+lmer_acc2_bluti_group = lmer(acc2 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+rlmer_acc2_bluti_group = rlmer(acc2 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_acc2_bluti_group)
+#probably singular
+plot(rlmer_acc2_bluti_group)
+```
+
+```{r}
+rlmer2_acc2_group <- update(rlmer_acc2_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.69
+
+```
+
+```{r}
+rlmer3_acc2_group <- update(rlmer2_acc2_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_acc2_bluti_group, rlmer_acc2_bluti_group, rlmer2_acc2_group, rlmer3_acc2_group, show.rho.functions = FALSE)
+#3.64, 2.88, 3.09, 3.55
+```
+###### tab_model
+```{r}
+tab_model(rlmer_acc2_bluti_group)
+tab_model(lmer_acc2_bluti_group)
+```
+###### plot 
+```{r}
+#scare_outcome
+
+rlmer_acc2_scare_predict <- predict_response(rlmer_acc2_bluti_group, "scare_outcome", margin = "empirical")
+lmer_acc2_scare_predict <- predict_response(lmer_acc2_bluti_group, "scare_outcome", margin = "mean_reference")
+
+acc2_scare <- plot(rlmer_acc2_scare_predict) + labs(title = "", x = "", y = "acc2 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc2_scare_lmer <- plot(lmer_acc2_scare_predict) + labs(title = "", x = "", y = "acc2 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc2_scare
+acc2_scare_lmer
+
+#group
+rlmer_acc2_bluti_predict <- predict_response(rlmer_acc2_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_acc2_bluti_predict <- predict_response(lmer_acc2_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+
+acc2_group <- plot(rlmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc2_group_lmer <- plot(lmer_acc2_bluti_predict)+ labs(x = "", y = "acc2 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc2_group 
+acc2_group_lmer
+
+rlmer_acc2_bluti_interact <- predict_response(rlmer_acc2_bluti_group, c("day_since","exp_group"), margin = "marginalmeans")
+lmer_acc2_bluti_interact <- predict_response(lmer_acc2_bluti_group, c("day_since","exp_group"), margin = "marginalmeans")
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(895)
+#scare
+test_predictions(rlmer_acc2_scare_predict)
+test_predictions(lmer_acc2_scare_predict)
+
+#group
+test_predictions(rlmer_acc2_bluti_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_acc2_bluti_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+
+#no effect - but estimates tend to be higher for treatment 
+test_predictions(rlmer_acc2_bluti_interact, test = "interaction", p_adjust = "sidak") 
+test_predictions(lmer_acc2_bluti_interact, test = "interaction", p_adjust = "sidak") 
+
+#no interaction effect
+```
+
+#### acc3
+##### model assumption
+```{r}
+
+lmer_acc3_bluti_group = lmer(acc3 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal)
+
+
+#celsius.now + celsius.12hr + month
+
+# Computes the default residuals (raw conditional)
+raw_cond_acc3 <- compute_redres(lmer_acc3_bluti_group)
+
+#linearity - can't test as all the terms are categorical 
+hist(raw_cond_acc3) #normality in histogram
+plot_redres(lmer_acc3_bluti_group) #heteroskedasticity
+plot_resqq(lmer_acc3_bluti_group) #normality of residuals - heavy tailed and bimodal?
+plot_ranef(lmer_acc3_bluti_group) #normality of random effects residuals
+
+simulation_output <- simulateResiduals(fittedModel = lmer_acc3_bluti_group, n = 1000)
+plot(simulation_output)
+```
+
+##### robustlmm {.tab}
+```{r}
+#singular
+lmer_acc3_bluti_group = lmer(acc3 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+#probably singular
+
+rlmer_acc3_bluti_group = rlmer(acc3 ~ 1 + day_since*exp_group + scare_outcome + prev_scares + flight_no + age + sex + hr+ celsius.now + date_label+(1|id), data = ir.out.bluti_bal)
+
+summary(rlmer_acc3_bluti_group)
+#probably singular
+plot(rlmer_acc3_bluti_group)
+```
+
+```{r}
+rlmer2_acc3_group <- update(rlmer_acc3_bluti_group, rho.sigma.e = psi2propII(smoothPsi, k = 1.69), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 1.66)) #both fixed and random effects -> k = 1.69
+#50 warnings
+```
+
+```{r}
+rlmer3_acc3_group <- update(rlmer2_acc3_group,  rho.sigma.e = psi2propII(smoothPsi, k = 2.28), 
+                 rho.sigma.b = psi2propII(smoothPsi, k = 2.28))
+```
+
+```{r}
+compare(lmer_acc3_bluti_group, rlmer_acc3_bluti_group, rlmer2_acc3_group, rlmer3_acc3_group, show.rho.functions = FALSE)
+#2.34, 1.94, 1.96, 2.13
+```
+
+###### tab_model
+```{r}
+tab_model(rlmer_acc3_bluti_group)
+tab_model(lmer_acc3_bluti_group)
+```
+###### plot 
+```{r}
+
+# scare
+rlmer_acc3_scare_predict <- predict_response(rlmer_acc3_bluti_group, "scare_outcome", margin = "empirical")
+lmer_acc3_scare_predict <- predict_response(lmer_acc3_bluti_group, "scare_outcome", margin = "mean_reference")
+
+acc3_scare <- plot(rlmer_acc3_scare_predict) + labs(title = "", x = "", y = "acc3 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+acc3_scare_lmer <- plot(lmer_acc3_scare_predict) + labs(title = "", x = "", y = "acc3 (m/s^2)") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc3_scare
+acc3_scare_lmer
+
+#group
+rlmer_acc3_group_predict <- predict_response(rlmer_acc3_bluti_group, c("day_since","exp_group"),margin = "empirical")
+lmer_acc3_group_predict <- predict_response(lmer_acc3_bluti_group, c("day_since","exp_group"),margin = "mean_reference")
+
+acc3_group <- plot(rlmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc3_group_lmer <- plot(lmer_acc3_group_predict)+ labs(x = "", y = "acc3 (m/s^2)", title = "", colour = "group") +scale_color_manual(values = c("#0072B2", "#CC79A7")) + theme(legend.position = "none") +
+  theme(
+    axis.title.y = element_text(size = 24),   # y label
+    axis.text.x = element_text(size = 18),    # tick marks
+    axis.text.y = element_text(size = 18)   
+  )
+
+acc3_group 
+acc3_group_lmer
+
+rlmer_acc3_group_interact <- predict_response(rlmer_acc3_bluti_group, c("day_since","exp_group"), margin = "marginalmeans")
+lmer_acc3_group_interact <- predict_response(lmer_acc3_bluti_group, c("day_since", "exp_group"), margin = "marginalmeans")
+```
+###### test
+```{r}
+emm_options(rg.limit = 40000)
+set.seed(2330)
+#scare
+test_predictions(rlmer_acc3_scare_predict)
+test_predictions(lmer_acc3_scare_predict)
+
+
+#group
+test_predictions(rlmer_acc3_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+test_predictions(lmer_acc3_group_predict, collapse_levels = TRUE, p_adjust = "sidak")
+
+
+#no effect - but estimates tend to be higher for treatment 
+
+test_predictions(rlmer_acc3_group_interact, test = "interaction", p_adjust = "sidak")
+test_predictions(lmer_acc3_group_interact, test = "interaction", p_adjust = "sidak")
+
+
+#no interaction effect
+```
+
+### PLOTS
+#### scare_outcome
+```{r}
+
+ggarrange(bw_scare, maxF_scare, Fx_scare, Fy_scare,
+          acc0_scare, acc1_scare, acc2_scare, acc3_scare,
+          v1_scare, v2_scare, v3_scare,v4_scare, nrow = 3, ncol = 4)
+
+```
+```{r}
+ggarrange(bw_scare_lmer, maxF_scare_lmer, Fx_scare_lmer, Fy_scare_lmer,
+          acc0_scare_lmer, acc1_scare_lmer, acc2_scare_lmer, acc3_scare_lmer,
+          v1_scare_lmer, v2_scare_lmer, v3_scare_lmer, v4_scare_lmer, nrow = 3, ncol = 4)
+
+```
+#### group comparisons
+```{r}
+ggarrange(bw_group, maxF_group, Fx_group, Fy_group,
+          acc0_group, acc1_group, acc2_group, acc3_group,
+          v1_group, v2_group, v3_group,v4_group, nrow = 3, ncol = 4)
+
+```
+```{r}
+ggarrange(bw_group_lmer, maxF_group_lmer, Fx_group_lmer, Fy_group_lmer,
+          acc0_group_lmer, acc1_group_lmer, acc2_group_lmer, acc3_group_lmer,
+          v1_group_lmer, v2_group_lmer, v3_group_lmer, v4_group_lmer, nrow = 3, ncol = 4)
+
+```
+### REPEATABILITY
+#### bw
+```{r}
+bw.rpt <- rpt(bodyweight ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal, grname = "id", datatype = "Gaussian", nboot = 1000, npermut = 100)
+
+bw.rpt
+
+
+plot.bw.rpt <- plot(bw.rpt)
+
+plot.bw.rpt
+```
+#### maxF
+```{r}
+maxF.rpt <- rpt(max_Ftot ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal, grname = "id", datatype = "Gaussian", nboot = 1000, npermut = 100)
+
+maxF.rpt
+
+plot.maxF.rpt <- plot(maxF.rpt, main = "individual repeatability for maxF")
+
+plot.maxF.rpt
+
+#R  = 0.136
+#SE = 0.033
+#CI = [0.074, 0.202]
+#P  = 2.28e-110 [LRT]
+#     0.01 [Permutation]
+```
+#### Fx
+```{r}
+Fx.rpt <- rpt(Fx ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal, grname = "id", datatype = "Gaussian", nboot = 1000, npermut = 100)
+
+Fx.rpt
+plot.Fx.rpt <- plot(Fx.rpt, main = "individual repeatability for Fx")
+plot.Fx.rpt
+```
+#### Fy
+```{r}
+Fy.rpt <- rpt(Fy ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal, grname = "id", datatype = "Gaussian", nboot = 1000, npermut = 100)
+
+Fy.rpt
+```
+#### acc0
+```{r}
+acc0.rpt <- rpt(int_acc ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = force.out.bluti_bal, grname = "id", datatype = "Gaussian", nboot = 1000, npermut = 100)
+
+acc0.rpt 
+# R  = 0.112
+#SE = 0.03
+#CI = [0.058, 0.174]
+#P  = 6.71e-79 [LRT]
+#     0.01 [Permutation]
+```
+#### acc1
+```{r}
+acc1.rpt <- rpt(acc1 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+acc1.rpt
+```
+#### acc2
+```{r}
+acc2.rpt <- rpt(acc2 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+acc2.rpt
+```
+#### acc3
+```{r}
+acc3.rpt <- rpt(acc3 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+acc3.rpt
+```
+#### v1
+```{r}
+v1.rpt <- rpt(v1 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+v1.rpt
+
+#R  = 0.053
+#SE = 0.019
+#CI = [0.022, 0.093]
+#P  = 2.97e-27 [LRT]
+#     0.01 [Permutation]
+```
+#### v2
+```{r}
+v2.rpt <- rpt(v2 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+v2.rpt
+```
+#### v3
+```{r}
+v3.rpt <- rpt(v3 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100)
+
+v3.rpt
+```
+#### v4
+```{r}
+v4.rpt <- rpt(v4 ~ 1  + day_since*exp_group + scare_outcome + prev_scares + flight_no  + sex + age + hr+ celsius.now + date_label + (1|id), data = ir.out.bluti_bal, datatype = "Gaussian", grname = "id", nboot = 1000, npermut = 100) 
+
+v4.rpt
+```
