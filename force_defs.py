@@ -521,7 +521,7 @@ def apply_butterfilt(FT_df, order, cutoff, columns=['Fx', 'Fy', 'Fz', 'Tx', 'Ty'
         grouped_df = FT_df.groupby(['RFID', 'event2','day'], dropna=False, as_index=False)
 
     # Make new dataframe for filtered data    
-    butter_df = pd.DataFrame()
+    butter_df_dayx_bw = pd.DataFrame()
 
     # apply filter to all F/T components of each individual signal
     for name, signal_df in tqdm(grouped_df, total=grouped_df.size().shape[0]):
@@ -529,10 +529,10 @@ def apply_butterfilt(FT_df, order, cutoff, columns=['Fx', 'Fy', 'Fz', 'Tx', 'Ty'
             col_filt = col+'_filt'
             signal_df[col_filt] = butter_filt(signal_df[col], order=order, cutoff=cutoff)
 
-        butter_df = pd.concat([butter_df, signal_df], ignore_index=True)
+        butter_df_dayx_bw = pd.concat([butter_df_dayx_bw, signal_df], ignore_index=True)
 
     
-    return butter_df
+    return butter_df_dayx_bw
 
 #noisy needs to have 'Fx_filt' column 
 def detect_plateaus(noisy, threshold=0.00000011, min_length=300):
@@ -669,9 +669,9 @@ def compute_Ftotal(df, use_filt=True):
     return df
 
 
-def get_force(butter_df):
+def get_force(butter_df_dayx_bw):
     # Compute Ftotal first
-    butter_df = compute_Ftotal(butter_df)
+    butter_df_dayx_bw = compute_Ftotal(butter_df_dayx_bw)
 
     # DataFrame to return
     force_outcome = pd.DataFrame(columns=['RFID', 'datetime', 'event_no', 'bodyweight', 'max_Ftot', 'ninety9_perc_Ftot', 'time_max_Ftot',  'Fx_maxFtot',
@@ -679,7 +679,7 @@ def get_force(butter_df):
  'time_max_Fz'])
 
     # Group the DataFrame by 'event2' and 'day'
-    grouped = butter_df.groupby(['event2', 'day'])
+    grouped = butter_df_dayx_bw.groupby(['event2', 'day'])
 
     # Iterate through each group with a progress bar
     for (event2, day), event_data in tqdm(grouped, desc="Processing groups"):
@@ -718,6 +718,7 @@ def get_force(butter_df):
         time_max_Fy = event_data.loc[idx_max_Fy, 'Time']
         time_max_Fz = event_data.loc[idx_max_Fz, 'Time']
         
+        # NEW - impulse 
         
         #angle and time difference between time_max_Ftot and time_max_Fx/time_max_Fy/time_max_Fz can be calculated later. 
         
@@ -747,6 +748,90 @@ def get_force(butter_df):
         force_outcome = pd.concat([force_outcome, pd.DataFrame([new_row])], ignore_index=True)
 
     return force_outcome
+
+def get_longest_continuous_block(df, col):
+    """
+    Returns the longest continuous block where df[col] > 0.
+    """
+    mask = df[col] > 0
+    idx = df.index[mask]
+
+    if idx.empty:
+        return df.iloc[[]]
+
+    # Find start and end indices of all continuous blocks
+    blocks = []
+    start = idx[0]
+    prev = idx[0]
+    for i in idx[1:]:
+        if i == prev + 1:
+            prev = i
+        else:
+            blocks.append((start, prev))
+            start = i
+            prev = i
+    blocks.append((start, prev))
+
+    # Find the longest block
+    longest = max(blocks, key=lambda x: x[1] - x[0] + 1)
+    return df.loc[longest[0]:longest[1]]
+
+
+    # function to additionally calculate impulse and duration of impulse using bodyweight
+def get_impulse(butter_df_dayx_bw):
+
+      # Combining event and day for a unique identifier
+    # Dataframe to return
+    impulse_outcome = pd.DataFrame(pd.DataFrame(columns=['RFID', 'datetime', 'event_no', 'impulse', 'duration_impulse', 'bodyweight']))
+
+
+    # Group the DataFrame by 'event2' and 'day'
+    grouped = butter_df_dayx_bw.groupby(['event2', 'day'])
+
+    # Iterate through each group with a progress bar
+    for (event2, day), group in tqdm(grouped, desc="Processing unique events"):
+        
+        event_no = f"{event2}-{day}"
+        rfid = group['RFID'].iloc[0]
+        datetime = group['datetime'].iloc[0]
+        bodyweight = group['bodyweight'].iloc[0] #is same for all the rows 
+
+        # first, filter out the rows where 'bodyweight' column is NA
+        group = group[group['bodyweight'].notna()]
+  
+        group = group.reset_index(drop=True)
+
+        #subtract bodyweight from Ftotal_filt
+        group['Ftotal_filt_minus_bw'] = group['Ftotal_filt'] - bodyweight
+
+        #calculate 'Time_diff' from 'Time' column. subtracting first row from the second row and so on. fill the first na to 0.
+        group['Time_diff'] = group['Time'].diff().dt.total_seconds().fillna(0)
+
+        # find the longest continuous block of rows where 'Ftotal_filt_minus_bw' is above 0 using index.
+        continuous_block = group[group['Ftotal_filt_minus_bw'] > 0]
+        continuous_block = continuous_block[continuous_block.index.to_series().diff().fillna(1) == 1]
+        # find the longest continuous block of rows where 'Ftotal_filt_minus_bw' is above 0 using index.
+        continuous_block = get_longest_continuous_block(group, 'Ftotal_filt_minus_bw')
+
+        # Calculate impulse and duration of impulse for the period where 'Ftotal_filt' is above 0.
+
+        impulse = (continuous_block['Ftotal_filt_minus_bw'] * continuous_block['Time_diff']).sum()
+        duration_impulse = continuous_block['Time_diff'].sum()
+
+        # Create a new row for the impulse DataFrame
+        new_row = {
+            'RFID': rfid,
+            'datetime': datetime,
+            'event_no': event_no,
+            'impulse': impulse,
+            'duration_impulse': duration_impulse,
+            'bodyweight': bodyweight
+        }
+
+        # Append the new row to the impulse_outcome DataFrame
+        impulse_outcome = pd.concat([impulse_outcome, pd.DataFrame([new_row])], ignore_index=True)
+
+    return impulse_outcome
 
 def match_keys_preparation(F_df, RFID_match):
     # Initialize DataFrames
