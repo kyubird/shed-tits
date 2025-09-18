@@ -82,6 +82,13 @@ F_day1_full <- read.delim(file =  "C:\\Users\\kmh\\Documents\\shed-tits-data\\fi
 #day-1 - being processed in VS code
 F_dayminus1_full <- read.delim(file =  "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\F_dayminus1_full.csv", sep = ",") 
 
+# impulse data 
+impulse_day0 <- read.delim(file = "C:\\Users\\kmh\\Documents\\GitHub\\shed-tits\\data\\impulse_day0.csv", sep = ",")
+
+impulse_day1 <- read.delim(file = "C:\\Users\\kmh\\Documents\\GitHub\\shed-tits\\data\\impulse_day0.csv", sep = ",")
+
+impulse_dayminus1 <- read.delim(file = "C:\\Users\\kmh\\Documents\\GitHub\\shed-tits\\data\\impulse_dayminus1.csv", sep = ",")
+
 # IR data
 control_ir_full <- read.delim(file = "C:\\Users\\kmh\\Documents\\shed-tits-data\\final_data\\ir_control_ordered.csv", sep = ",")
 
@@ -119,10 +126,15 @@ plot(temperature$temperature_a, temperature$temperature_b)
 ### shape of datasets
 ```{r}
 
-cat("F_control_full dim: ",dim(F_control_full)) #2063
-cat("control_ir_full dim: ",dim(control_ir_full)) #1314
-cat("F_treats_full dim: ",dim(F_treats_full)) #2215
-cat("treats_ir_full dim: ",dim(treats_ir_full)) #1428
+cat("F_control_full dim: ",dim(F_control_full)) #2607
+cat("control_ir_full dim: ",dim(control_ir_full)) #1693
+cat("F_treats_full dim: ",dim(F_treats_full)) #2679
+cat("treats_ir_full dim: ",dim(treats_ir_full)) #1728
+
+cat("impulse day 0 dim: ", dim(impulse_day0)) #2968
+cat("impulse day 1 dim: ", dim(impulse_day1)) #2968 crazy that it's exactly same no. of rows as day0! 
+cat("impulse day -1 dim: ", dim(impulse_dayminus1)) #3068
+
 
 cat("F_day1_full dim: ",dim(F_day1_full)) #5808
 cat("day1_ir_full dim: ",dim(day1_ir_full)) #5171
@@ -140,8 +152,8 @@ F_pooled_full <-rbind(F_control_full, F_treats_full)
 #IR
 pooled_ir_full <-rbind(control_ir_full, treats_ir_full)
 
-cat("F_pooled_full dim: ",dim(F_pooled_full)) #4278
-cat("pooled_ir_full dim: ",dim(pooled_ir_full)) #2742
+cat("F_pooled_full dim: ",dim(F_pooled_full)) #5286
+cat("pooled_ir_full dim: ",dim(pooled_ir_full)) #3421
 ```
 
 ### 3. add hr column 
@@ -220,9 +232,25 @@ dayminus1_ir_full <- dayminus1_ir_full %>%
 
 ```
 
+### 5. add impulse column to Force
+- power reaction time. 
+```{r}
+#select columns
+impulse_day0 <- impulse_day0 %>% select("id", event_no = event2, "impulse", "duration")
+impulse_day1 <- impulse_day1 %>% select("id", event_no = event2, "impulse", "duration")
+impulse_dayminus1 <- impulse_dayminus1 %>% select("id", event_no = event2, "impulse", "duration")
+  
+F_pooled_full <- merge(F_pooled_full, impulse_day0, by = c("id", "event_no")) %>%
+  filter(impulse > 0.003 )
+F_day1_full <- merge(F_day1_full, impulse_day1, by = c("id", "event_no")) %>%
+  filter(impulse > 0.003 ) #somehow F_day1_full not showing up. 
+F_dayminus1_full <- merge(F_dayminus1_full, impulse_dayminus1, by = c("id", "event_no")) %>%
+  filter(impulse > 0.003 )
+
+```
 
 
-### 5. bodyweight filter
+### 6. bodyweight filter
 ```{r}
 
 #bodyweight calculation
@@ -277,7 +305,7 @@ cat("Force day-1 after filtering: ",dim(F_dayminus1_full))
 
 ```
 
-### 6. int_acc and bodyweight adjustments
+### 7. int_acc and bodyweight adjustments
 ```{r}
 #int_acc calculation
 F_pooled_full$int_acc = (F_pooled_full$max_Ftot/F_pooled_full$bodyweight)
@@ -307,7 +335,7 @@ F_dayminus1$bodyweight <- F_dayminus1$bodyweight*1000
 ```
 
 
-### 7. calculate angle
+### 8. calculate angle
 ```{r}
 #run only once
 F_day0 <- F_day0 %>%
@@ -324,7 +352,7 @@ F_dayminus1 <- F_dayminus1 %>%
 
 
 
-### 8. add 'day_since'column
+### 9. add 'day_since'column
 ```{r}
 
 F_day0$day_since <- 0
@@ -369,7 +397,7 @@ cat("day-1_ir dim: ",dim(dayminus1_ir)) #3194
 ```
 
 
-### 9. add 'group' column
+### 10. add 'group' column
 - tracking control & treatment birds on experimental days to the day after
 #### a. group columns for F
 ```{r}
@@ -957,7 +985,36 @@ dates_visited <- force.out.bluti_bal %>%
 
 dates_visited
 ```
+#### no. of escape flights vs. spontaneous flights
+```{r}
+force_scare <- force.out.bluti_bal %>%
+  group_by(scare_outcome) %>%
+  summarise(
+    count = n()
+  )
 
+
+force_unique_ids_scare <- force.out.bluti_bal %>%
+  filter(scare_outcome == "escape") %>%
+  summarise(unique_id_count = n_distinct(id))
+
+
+ir_scare <- ir.out.bluti_bal %>%
+  group_by(scare_outcome) %>%
+  summarise(
+    count = n()
+  )
+
+ir_unique_ids_scare <- force.out.bluti_bal %>%
+  filter(scare_outcome == "escape") %>%
+  summarise(unique_id_count = n_distinct(id))
+
+force_scare
+force_unique_ids_scare
+ir_scare
+ir_unique_ids_scare
+
+```
 ### 5. checking correlations
 #### 5.a. na checks
 ```{r}
