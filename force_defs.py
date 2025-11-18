@@ -749,89 +749,88 @@ def get_force(butter_df_dayx_bw):
 
     return force_outcome
 
-def get_longest_continuous_block(df, col):
-    """
-    Returns the longest continuous block where df[col] > 0.
-    """
-    mask = df[col] > 0
-    idx = df.index[mask]
+def calculate_impulse(butter_df_day0_bw):
+    # for each event2, calculate impulse and store in a new DataFrame
+    impulse_list = []
 
-    if idx.empty:
-        return df.iloc[[]]
+    for event in butter_df_day0_bw['event_no'].unique():
 
-    # Find start and end indices of all continuous blocks
-    blocks = []
-    start = idx[0]
-    prev = idx[0]
-    for i in idx[1:]:
-        if i == prev + 1:
-            prev = i
-        else:
-            blocks.append((start, prev))
-            start = i
-            prev = i
-    blocks.append((start, prev))
+        event_data = butter_df_day0_bw[butter_df_day0_bw['event_no'] == event]
 
-    # Find the longest block
-    longest = max(blocks, key=lambda x: x[1] - x[0] + 1)
-    return df.loc[longest[0]:longest[1]]
+        # sort by Time and rearrange index
+        event_data = event_data.sort_values(by='Time').reset_index(drop=True)
 
+        # calculate F_impulse, or Ftotal_filt - bodyweight. 
+        event_data['F_impulse'] = event_data['Ftotal_filt'] - event_data['bodyweight']
 
-    # function to additionally calculate impulse and duration of impulse using bodyweight
-def get_impulse(butter_df_dayx_bw):
+        # find the peak index of F_impulse // peak index should be the same for Ftotal_filt and F_impulse
+        peak_index = event_data['F_impulse'].idxmax()
 
-      # Combining event and day for a unique identifier
-    # Dataframe to return
-    impulse_outcome = pd.DataFrame(pd.DataFrame(columns=['RFID', 'datetime', 'event_no', 'impulse', 'duration_impulse', 'bodyweight']))
+        # 1 index == 0.001 seconds. 0.25 seconds == 250 indices
+        # filter out events with peak Ftot in the first or last 0.25 seconds
+        if peak_index < 250 or peak_index > (len(event_data) - 250):
+            continue
+
+        # filter out events where peak Ftot occurs and 0.1 sec later, Ftot is still larger than 0.05 N.
+        if event_data.loc[peak_index + 100, 'Ftotal_filt'] > 0.05:
+            continue
 
 
-    # Group the DataFrame by 'event2' and 'day'
-    grouped = butter_df_dayx_bw.groupby(['event2', 'day'])
+        # subset data around peak (±0.055 seconds)
+        peak_time = event_data.loc[peak_index, 'Time']
+        event_data = event_data[(event_data['Time'] >= peak_time - 0.055) & (event_data['Time'] <= peak_time + 0.055)].reset_index(drop=True)
 
-    # Iterate through each group with a progress bar
-    for (event2, day), group in tqdm(grouped, desc="Processing unique events"):
+        #append event_data
+        #impulse_data = pd.DataFrame(columns=event_data.columns)  # Initialize empty DataFrame
+        #impulse_data = pd.concat([impulse_data, event_data], ignore_index=True)
+
+        # Find start and end indices using iloc
+
         
-        event_no = f"{event2}-{day}"
-        rfid = group['RFID'].iloc[0]
-        datetime = group['datetime'].iloc[0]
-        bodyweight = group['bodyweight'].iloc[0] #is same for all the rows 
+        positive_impulse = event_data[event_data['F_impulse'] > 0]
 
-        # first, filter out the rows where 'bodyweight' column is NA
-        group = group[group['bodyweight'].notna()]
-  
-        group = group.reset_index(drop=True)
+        if not positive_impulse.empty:
+            start_index = positive_impulse.index[0]
+            end_index = positive_impulse.index[-1]
+            peak_index = positive_impulse['F_impulse'].idxmax()
+        else:
+            start_index = end_index = peak_index = None
 
-        #subtract bodyweight from Ftotal_filt
-        group['Ftotal_filt_minus_bw'] = group['Ftotal_filt'] - bodyweight
 
-        #calculate 'Time_diff' from 'Time' column. subtracting first row from the second row and so on. fill the first na to 0.
-        group['Time_diff'] = group['Time'].diff().dt.total_seconds().fillna(0)
+        # Calculate impulse
+        if start_index is None or end_index is None:
+            impulse = 0 # good for later filtering out events with no impulse 
+            continue
 
-        # find the longest continuous block of rows where 'Ftotal_filt_minus_bw' is above 0 using index.
-        continuous_block = group[group['Ftotal_filt_minus_bw'] > 0]
-        continuous_block = continuous_block[continuous_block.index.to_series().diff().fillna(1) == 1]
-        # find the longest continuous block of rows where 'Ftotal_filt_minus_bw' is above 0 using index.
-        continuous_block = get_longest_continuous_block(group, 'Ftotal_filt_minus_bw')
+        ## the criteria for 0.003 Ns impulse will be applied after this function in case I need to see which
+        ## events are filtered out in Rstudio. 
 
-        # Calculate impulse and duration of impulse for the period where 'Ftotal_filt' is above 0.
+        impulse = event_data.loc[start_index:end_index, 'F_impulse'].sum() / 1000  # Convert to N·s
+        duration = event_data.loc[end_index, 'Time'] - event_data.loc[start_index, 'Time' ]
+        left_impulse = event_data.loc[start_index:peak_index, 'F_impulse'].sum() / 1000  # Convert to N·s
+        left_duration = event_data.loc[peak_index, 'Time'] - event_data.loc[start_index, 'Time' ]
+        right_impulse = event_data.loc[peak_index:end_index, 'F_impulse'].sum() / 1000  # Convert to N·s
+        right_duration = event_data.loc[end_index, 'Time'] - event_data.loc[peak_index, 'Time' ]
+        impulse_ratio = left_impulse/right_impulse if right_impulse !=0 else np.nan
 
-        impulse = (continuous_block['Ftotal_filt_minus_bw'] * continuous_block['Time_diff']).sum()
-        duration_impulse = continuous_block['Time_diff'].sum()
+        impulse_list.append({
+                            'id': event_data['id'].iloc[0],
+                            'event2': event, 
+                            'datetime': event_data['datetime_x'].iloc[0],
+                            'bodyweight': event_data['bodyweight'].iloc[0],
+                            'impulse': impulse,
+                            'duration': duration,
+                            'left_impulse': left_impulse,
+                            'left_duration': left_duration,
+                            'right_impulse': right_impulse,
+                            'right_duration': right_duration,
+                            'impulse_ratio': impulse_ratio,
+                            'impulse_time_diff': left_duration - right_duration 
+                            })
+        
+        impulse_df = pd.DataFrame(impulse_list)
 
-        # Create a new row for the impulse DataFrame
-        new_row = {
-            'RFID': rfid,
-            'datetime': datetime,
-            'event_no': event_no,
-            'impulse': impulse,
-            'duration_impulse': duration_impulse,
-            'bodyweight': bodyweight
-        }
-
-        # Append the new row to the impulse_outcome DataFrame
-        impulse_outcome = pd.concat([impulse_outcome, pd.DataFrame([new_row])], ignore_index=True)
-
-    return impulse_outcome
+    return impulse_df
 
 def match_keys_preparation(F_df, RFID_match):
     # Initialize DataFrames
